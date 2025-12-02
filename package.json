@@ -1,0 +1,23 @@
+{
+  "name": "ittweb-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot for ITT Web tournament system",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node test-env.js",
+    "test:env": "node test-env.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "node-fetch": "^3.3.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["discord", "bot", "warcraft", "tournament"],
+  "author": "ITT Web",
+  "license": "MIT"
+}
