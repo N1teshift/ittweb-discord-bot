@@ -31,31 +31,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('games')
-    .setDescription('List upcoming scheduled games'),
-
-  new SlashCommandBuilder()
-    .setName('mygames')
-    .setDescription('List upcoming games you are participating in'),
-
-  new SlashCommandBuilder()
-    .setName('join')
-    .setDescription('Join a scheduled game')
-    .addStringOption(option =>
-      option.setName('game_id')
-        .setDescription('The game ID to join (use /games to find IDs). Leave empty to pick from a list.')
-        .setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName('leave')
-    .setDescription('Leave a scheduled game')
-    .addStringOption(option =>
-      option.setName('game_id')
-        .setDescription('The game ID to leave (use /games to find IDs)')
-        .setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName('reminders')
-    .setDescription('Show your active game start reminders (within the next few hours)'),
+    .setDescription('Browse and manage upcoming scheduled games'),
 ];
 
 // Register commands with Discord
@@ -441,6 +417,48 @@ function buildJoinSelectMenu(games, currentUserId) {
   return row;
 }
 
+function buildGamesSelectMenu(games) {
+  const options = [];
+
+  for (const game of games) {
+    if (!game || !game.gameId || !game.id) continue;
+
+    const rawDate = game.scheduledDateTimeString || game.scheduledDateTime;
+    const gameTime = new Date(rawDate).toLocaleString('en-US', {
+      timeZone: 'UTC',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    const participants = game.participants || [];
+    const maxPlayers = getMaxPlayersFromTeamSize(game.teamSize);
+    const playersValue = maxPlayers ? `${participants.length}/${maxPlayers}` : `${participants.length}`;
+
+    options.push({
+      label: `Game #${game.gameId} • ${game.teamSize} ${game.gameType}`,
+      description: `${gameTime} UTC • ${playersValue} players`,
+      value: String(game.id), // internal document ID
+    });
+
+    if (options.length >= 25) break;
+  }
+
+  if (options.length === 0) {
+    return null;
+  }
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('games_select')
+    .setPlaceholder('Choose a game to view details and join/leave')
+    .addOptions(options);
+
+  const row = new ActionRowBuilder().addComponents(select);
+  return row;
+}
+
 // Create game embed and buttons
 function createGameEmbed(game, participants = []) {
   const rawDate = game.scheduledDateTimeString || game.scheduledDateTime;
@@ -561,31 +579,15 @@ async function handleSlashCommand(interaction) {
         await interaction.deferReply({ ephemeral: false });
       }
 
-      // Ensure user exists in our system
-      await ensureUserExists(user.id, user.displayName || user.username);
-      const timeString = interaction.options.getString('time');
-
-      try {
-        const scheduledDateTime = parseTimeToUTC(timeString);
-        const gameId = await createScheduledGame(user.id, user.displayName || user.username, scheduledDateTime);
-
-        // Get the created game to show details
-        const game = await getGameById(gameId);
-        const participants = game.participants || [];
-
-        const embed = createGameEmbed(game, participants);
-        const buttons = createGameButtons(gameId, participants.some(p => p.discordId === user.id));
-
-        await interaction.reply({
-          embeds: [embed],
-          components: [buttons]
-        });
-
-      } catch (error) {
-        await interaction.editReply({
-          content: `❌ Failed to schedule game: ${error.message}`,
-        });
-      }
+      // Bot-based scheduling is not yet supported by the website API.
+      // The /api/games POST endpoint requires a NextAuth session, which the bot cannot provide.
+      // Until the site adds a bot-specific scheduling endpoint, direct scheduling from Discord
+      // will always fail with "Internal server error".
+      await interaction.editReply({
+        content:
+          '📅 Scheduling games from Discord is not available yet.\n' +
+          'Please create scheduled games on the website, then use `/games` here to join or leave them.',
+      });
       break;
     }
 
@@ -632,8 +634,11 @@ async function handleSlashCommand(interaction) {
 
         embed.setDescription(description);
 
+        const selectRow = buildGamesSelectMenu(games);
+
         await interaction.editReply({
-          embeds: [embed]
+          embeds: [embed],
+          components: selectRow ? [selectRow] : []
         });
 
       } catch (error) {
@@ -1048,11 +1053,6 @@ async function handleButton(interaction) {
 async function handleSelectMenu(interaction) {
   const { customId, values, user } = interaction;
 
-  // Currently only one select menu type: join_select
-  if (customId !== 'join_select') {
-    return;
-  }
-
   // Ensure user exists in our system
   await ensureUserExists(user.id, user.displayName || user.username);
 
@@ -1063,50 +1063,70 @@ async function handleSelectMenu(interaction) {
       await interaction.deferReply({ ephemeral: true });
     }
 
-    // Validate game exists and is scheduled
-    const game = await getGameById(gameId);
-    if (game.gameState !== 'scheduled') {
+    // games_select: show details + join/leave buttons
+    if (customId === 'games_select') {
+      const game = await getGameById(gameId);
+      const participants = game.participants || [];
+      const userJoined = participants.some(p => p.discordId === user.id);
+
+      const embed = createGameEmbed(game, participants);
+      const buttons = createGameButtons(gameId, userJoined);
+
       await interaction.editReply({
-        content: '❌ This game is no longer scheduled for joining.',
+        embeds: [embed],
+        components: [buttons]
       });
       return;
     }
 
-    // Check if user is already a participant
-    const participants = game.participants || [];
-    if (participants.some(p => p.discordId === user.id)) {
+    // join_select: auto-join the selected game (used by /join)
+    if (customId === 'join_select') {
+      // Validate game exists and is scheduled
+      const game = await getGameById(gameId);
+      if (game.gameState !== 'scheduled') {
+        await interaction.editReply({
+          content: '❌ This game is no longer scheduled for joining.',
+        });
+        return;
+      }
+
+      // Check if user is already a participant
+      const participants = game.participants || [];
+      if (participants.some(p => p.discordId === user.id)) {
+        await interaction.editReply({
+          content: '❌ You are already participating in this game.',
+        });
+        return;
+      }
+
+      // Check if game is full
+      const maxPlayers = getMaxPlayersFromTeamSize(game.teamSize);
+      if (maxPlayers && participants.length >= maxPlayers) {
+        await interaction.editReply({
+          content: '❌ This game is already full.',
+        });
+        return;
+      }
+
+      await joinScheduledGame(user.id, user.displayName || user.username, gameId);
+
+      // Get updated game data and show result
+      const updatedGame = await getGameById(gameId);
+      const updatedParticipants = updatedGame.participants || [];
+
+      // Schedule reminder DM
+      scheduleReminderForGame(user.id, updatedGame);
+
+      const embed = createGameEmbed(updatedGame, updatedParticipants);
+      const buttons = createGameButtons(gameId, true); // User just joined
+
       await interaction.editReply({
-        content: '❌ You are already participating in this game.',
+        content: '✅ Successfully joined the game!',
+        embeds: [embed],
+        components: [buttons]
       });
       return;
     }
-
-    // Check if game is full
-    const maxPlayers = getMaxPlayersFromTeamSize(game.teamSize);
-    if (maxPlayers && participants.length >= maxPlayers) {
-      await interaction.editReply({
-        content: '❌ This game is already full.',
-      });
-      return;
-    }
-
-    await joinScheduledGame(user.id, user.displayName || user.username, gameId);
-
-    // Get updated game data and show result
-    const updatedGame = await getGameById(gameId);
-    const updatedParticipants = updatedGame.participants || [];
-
-    // Schedule reminder DM
-    scheduleReminderForGame(user.id, updatedGame);
-
-    const embed = createGameEmbed(updatedGame, updatedParticipants);
-    const buttons = createGameButtons(gameId, true); // User just joined
-
-    await interaction.editReply({
-      content: '✅ Successfully joined the game!',
-      embeds: [embed],
-      components: [buttons]
-    });
 
   } catch (error) {
     await interaction.editReply({
