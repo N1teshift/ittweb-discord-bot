@@ -1,4 +1,5 @@
 // Simple script to test environment variables and API connectivity
+import 'dotenv/config';
 import fetch from 'node-fetch';
 
 const requiredEnvVars = [
