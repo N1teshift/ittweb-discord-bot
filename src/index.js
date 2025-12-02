@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import fetch from 'node-fetch';
 
 // Configuration from environment variables
@@ -21,14 +21,6 @@ const client = new Client({
 
 // Slash commands definition
 const commands = [
-  new SlashCommandBuilder()
-    .setName('schedule')
-    .setDescription('Schedule a new game')
-    .addStringOption(option =>
-      option.setName('time')
-        .setDescription('Game time (e.g., "8pm", "20:00", "tomorrow 3pm")')
-        .setRequired(true)),
-
   new SlashCommandBuilder()
     .setName('games')
     .setDescription('Browse and manage upcoming scheduled games'),
@@ -155,36 +147,49 @@ async function ensureUserExists(discordId, displayName) {
   }
 }
 
-async function createScheduledGame(discordId, displayName, scheduledDateTime) {
-  const response = await fetch(`${ITT_API_BASE}/api/games`, {
+async function createScheduledGame(discordId, displayName, scheduledDateTime, teamSize = '1v1', gameType = 'normal', gameVersion = 'v3.28', gameLength = 1800, modes = []) {
+  if (!BOT_API_KEY) {
+    throw new Error('Bot API key not configured');
+  }
+
+  const response = await fetch(`${ITT_API_BASE}/api/games/schedule-bot`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-discord-id': discordId,
+      'x-bot-api-key': BOT_API_KEY,
     },
     body: JSON.stringify({
-      gameState: 'scheduled',
+      discordId,
+      displayName,
       scheduledDateTime,
       timezone: 'UTC',
-      teamSize: '1v1',
-      gameType: 'normal',
-      gameVersion: 'v3.28',
-      gameLength: 1800,
-      modes: [],
-      creatorName: displayName,
-      createdByDiscordId: discordId,
+      teamSize,
+      gameType,
+      gameVersion,
+      gameLength,
+      modes,
       addCreatorToParticipants: true,
     }),
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to create game: ${error}`);
+    const errorText = await response.text();
+    let errorMessage = 'Unknown error';
+    try {
+      const errorData = JSON.parse(errorText);
+      errorMessage = errorData.error || errorData.message || errorText;
+    } catch {
+      errorMessage = errorText;
+    }
+    throw new Error(`Failed to schedule game: ${errorMessage}`);
   }
 
   const result = await response.json();
-  // Handle different response formats
-  return result.id || result.data?.id || result.gameId;
+  if (!result.success) {
+    throw new Error(`Failed to schedule game: ${result.error || 'Unknown error'}`);
+  }
+
+  return result.data?.id;
 }
 
 async function getScheduledGames() {
@@ -547,6 +552,8 @@ client.on('interactionCreate', async (interaction) => {
       await handleButton(interaction);
     } else if (interaction.isStringSelectMenu()) {
       await handleSelectMenu(interaction);
+    } else if (interaction.isModalSubmit()) {
+      await handleModalSubmit(interaction);
     }
   } catch (error) {
     console.error('Interaction error:', error);
@@ -573,24 +580,6 @@ async function handleSlashCommand(interaction) {
   const { commandName, user } = interaction;
 
   switch (commandName) {
-    case 'schedule': {
-      // Public response, can take longer due to API calls
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: false });
-      }
-
-      // Bot-based scheduling is not yet supported by the website API.
-      // The /api/games POST endpoint requires a NextAuth session, which the bot cannot provide.
-      // Until the site adds a bot-specific scheduling endpoint, direct scheduling from Discord
-      // will always fail with "Internal server error".
-      await interaction.editReply({
-        content:
-          '📅 Scheduling games from Discord is not available yet.\n' +
-          'Please create scheduled games on the website, then use `/games` here to join or leave them.',
-      });
-      break;
-    }
-
     case 'games': {
       if (!interaction.deferred && !interaction.replied) {
         await interaction.deferReply({ ephemeral: true });
@@ -635,10 +624,17 @@ async function handleSlashCommand(interaction) {
         embed.setDescription(description);
 
         const selectRow = buildGamesSelectMenu(games);
+        const scheduleButton = new ActionRowBuilder()
+          .addComponents(
+            new ButtonBuilder()
+              .setCustomId('schedule_game')
+              .setLabel('📅 Schedule New Game')
+              .setStyle(ButtonStyle.Primary)
+          );
 
         await interaction.editReply({
           embeds: [embed],
-          components: selectRow ? [selectRow] : []
+          components: selectRow ? [selectRow, scheduleButton] : [scheduleButton]
         });
 
       } catch (error) {
@@ -806,150 +802,79 @@ async function handleSlashCommand(interaction) {
       break;
     }
 
-    case 'mygames': {
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
-
-      // Ensure user exists in our system
-      await ensureUserExists(user.id, user.displayName || user.username);
-
-      try {
-        const games = await getScheduledGames();
-
-        const myGames = games.filter(game => {
-          const participants = game.participants || [];
-          return participants.some(p => p.discordId === user.id);
-        });
-
-        if (myGames.length === 0) {
-          await interaction.editReply({
-            content: 'You are not currently participating in any upcoming games.',
-          });
-          return;
-        }
-
-        const embed = new EmbedBuilder()
-          .setTitle('🧑‍💻 Your Upcoming Games')
-          .setColor(0x00cc66);
-
-        let description = '';
-        for (const game of myGames.slice(0, 10)) {
-          const rawDate = game.scheduledDateTimeString || game.scheduledDateTime;
-          const gameTime = new Date(rawDate).toLocaleString('en-US', {
-            timeZone: 'UTC',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true,
-          });
-
-          const participants = game.participants || [];
-          const maxPlayers = getMaxPlayersFromTeamSize(game.teamSize);
-          const playersValue = maxPlayers ? `${participants.length}/${maxPlayers}` : `${participants.length}`;
-          const relativeTime = formatTimeUntil(rawDate);
-
-          description += `**Game #${game.gameId}**: ${game.teamSize} ${game.gameType} at ${gameTime} UTC (${playersValue} players, starts ${relativeTime})\n`;
-        }
-
-        embed.setDescription(description);
-
-        await interaction.editReply({
-          embeds: [embed]
-        });
-
-      } catch (error) {
-        await interaction.editReply({
-          content: `❌ Failed to fetch your games: ${error.message}`
-        });
-      }
-      break;
-    }
-
-    case 'reminders': {
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
-
-      // Ensure user exists in our system
-      await ensureUserExists(user.id, user.displayName || user.username);
-
-      try {
-        const key = String(user.id);
-        const entries = reminderRegistry.get(key) || [];
-
-        if (entries.length === 0) {
-          await interaction.editReply({
-            content: `You have no active reminders. Reminders are only kept for games starting within the next few hours and are cleared after they trigger or if the bot restarts.`,
-          });
-          return;
-        }
-
-        const embed = new EmbedBuilder()
-          .setTitle('🔔 Your Active Game Reminders')
-          .setColor(0xffcc00);
-
-        let description = '';
-
-        // Show up to 10 reminders
-        for (const entry of entries.slice(0, 10)) {
-          const { gameId, gameTimeMs, reminderTimeMs } = entry;
-
-          // Fetch latest game data for better context; ignore failures
-          let game = null;
-          try {
-            game = await getGameById(gameId);
-          } catch {
-            // ignore
-          }
-
-          let line = `Game #${gameId}`;
-
-          if (game) {
-            const rawDate = game.scheduledDateTimeString || game.scheduledDateTime || new Date(gameTimeMs).toISOString();
-            const gameTime = new Date(rawDate).toLocaleString('en-US', {
-              timeZone: 'UTC',
-              month: 'short',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-            });
-
-            const relativeToGame = formatTimeUntil(rawDate);
-            line += ` — ${game.teamSize} ${game.gameType} at ${gameTime} UTC (starts ${relativeToGame})`;
-          }
-
-          const relativeToReminder = formatTimeUntil(reminderTimeMs);
-          line += ` • reminder ${relativeToReminder}`;
-
-          description += `${line}\n`;
-        }
-
-        embed.setDescription(description || 'No active reminders.');
-
-        await interaction.editReply({
-          embeds: [embed]
-        });
-
-      } catch (error) {
-        await interaction.editReply({
-          content: `❌ Failed to load your reminders: ${error.message}`
-        });
-      }
-      break;
-    }
-
   }
 }
 
 async function handleButton(interaction) {
   const { customId, user } = interaction;
-  const [action, gameId] = customId.split('_');
 
   // Ensure user exists in our system
   await ensureUserExists(user.id, user.displayName || user.username);
+
+  // Handle schedule_game button (doesn't follow action_gameId pattern)
+  if (customId === 'schedule_game') {
+    const modal = new ModalBuilder()
+      .setCustomId('schedule_modal')
+      .setTitle('Schedule New Game');
+
+    const timeInput = new TextInputBuilder()
+      .setCustomId('game_time')
+      .setLabel('Game Time (e.g., "8pm", "20:00", "tomorrow 3pm")')
+      .setPlaceholder('When should the game start?')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMinLength(3)
+      .setMaxLength(50);
+
+    const teamSizeInput = new TextInputBuilder()
+      .setCustomId('team_size')
+      .setLabel('Team Size (1v1, 2v2, 3v3, 4v4, 5v5, 6v6)')
+      .setPlaceholder('e.g., 1v1, 2v2, etc.')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMinLength(3)
+      .setMaxLength(10);
+
+    const gameTypeInput = new TextInputBuilder()
+      .setCustomId('game_type')
+      .setLabel('Game Type (normal or elo)')
+      .setPlaceholder('normal')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMinLength(4)
+      .setMaxLength(10);
+
+    const gameVersionInput = new TextInputBuilder()
+      .setCustomId('game_version')
+      .setLabel('Game Version (optional)')
+      .setPlaceholder('v3.28')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false)
+      .setMinLength(3)
+      .setMaxLength(20);
+
+    const gameLengthInput = new TextInputBuilder()
+      .setCustomId('game_length')
+      .setLabel('Game Length in seconds (optional)')
+      .setPlaceholder('1800')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false)
+      .setMinLength(2)
+      .setMaxLength(10);
+
+    const firstRow = new ActionRowBuilder().addComponents(timeInput);
+    const secondRow = new ActionRowBuilder().addComponents(teamSizeInput);
+    const thirdRow = new ActionRowBuilder().addComponents(gameTypeInput);
+    const fourthRow = new ActionRowBuilder().addComponents(gameVersionInput);
+    const fifthRow = new ActionRowBuilder().addComponents(gameLengthInput);
+
+    modal.addComponents(firstRow, secondRow, thirdRow, fourthRow, fifthRow);
+
+    await interaction.showModal(modal);
+    return;
+  }
+
+  const [action, gameId] = customId.split('_');
 
   try {
     // Acknowledge the interaction immediately to avoid "Unknown interaction" on slow operations
@@ -1046,6 +971,76 @@ async function handleButton(interaction) {
       });
     } catch (innerError) {
       console.error('Failed to send button error response:', innerError);
+    }
+  }
+}
+
+async function handleModalSubmit(interaction) {
+  if (interaction.customId === 'schedule_modal') {
+    // Defer reply since API calls may take time
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ ephemeral: true });
+    }
+
+    try {
+      // Extract form data
+      const time = interaction.fields.getTextInputValue('game_time');
+      const teamSize = interaction.fields.getTextInputValue('team_size');
+      const gameType = interaction.fields.getTextInputValue('game_type');
+      const gameVersion = interaction.fields.getTextInputValue('game_version') || 'v3.28';
+      const gameLengthStr = interaction.fields.getTextInputValue('game_length') || '1800';
+
+      // Validate team size
+      const validTeamSizes = ['1v1', '2v2', '3v3', '4v4', '5v5', '6v6'];
+      if (!validTeamSizes.includes(teamSize)) {
+        await interaction.editReply({
+          content: `❌ Invalid team size "${teamSize}". Valid options: ${validTeamSizes.join(', ')}`
+        });
+        return;
+      }
+
+      // Validate game type
+      const validGameTypes = ['normal', 'elo'];
+      if (!validGameTypes.includes(gameType.toLowerCase())) {
+        await interaction.editReply({
+          content: `❌ Invalid game type "${gameType}". Valid options: ${validGameTypes.join(', ')}`
+        });
+        return;
+      }
+
+      // Validate game length
+      const gameLength = parseInt(gameLengthStr);
+      if (isNaN(gameLength) || gameLength < 60 || gameLength > 36000) {
+        await interaction.editReply({
+          content: '❌ Invalid game length. Must be between 60 and 36000 seconds.'
+        });
+        return;
+      }
+
+      // Parse time and validate
+      const scheduledDateTime = parseTimeToUTC(time);
+
+      // Create the game
+      const gameId = await createScheduledGame(
+        interaction.user.id,
+        interaction.user.displayName || interaction.user.username,
+        scheduledDateTime,
+        teamSize,
+        gameType.toLowerCase(),
+        gameVersion,
+        gameLength,
+        [] // modes array, empty for now
+      );
+
+      await interaction.editReply({
+        content: `✅ Game scheduled successfully! Game #${gameId}`,
+      });
+
+    } catch (error) {
+      console.error('Modal submission error:', error);
+      await interaction.editReply({
+        content: `❌ Failed to schedule game: ${error.message}`
+      });
     }
   }
 }
