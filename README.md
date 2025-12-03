@@ -55,6 +55,7 @@ Create a `.env` file in the project root:
 DISCORD_TOKEN=your_bot_token_here
 DISCORD_CLIENT_ID=your_application_id_here
 ITT_API_BASE=https://your-vercel-app.vercel.app
+BOT_API_KEY=your_bot_api_key_here
 DISCORD_GUILD_ID=your_server_id_here (optional, for faster command registration)
 ```
 
@@ -91,6 +92,7 @@ npm run dev
    - `DISCORD_TOKEN`
    - `DISCORD_CLIENT_ID`
    - `ITT_API_BASE`
+   - `BOT_API_KEY`
    - `DISCORD_GUILD_ID` (optional)
 
 ### 3. Railway Configuration
@@ -103,10 +105,12 @@ The bot integrates with your existing ITT Web API endpoints:
 
 - `GET /api/games` - Fetch scheduled games
 - `POST /api/games` - Create scheduled games
-- `POST /api/games/{id}/join` - Join games
-- `POST /api/games/{id}/leave` - Leave games
+- `POST /api/games/{id}/join-bot` - Join games (bot-authenticated)
+- `POST /api/games/{id}/leave-bot` - Leave games (bot-authenticated)
 - `GET /api/games/{id}` - Get game details
 - `POST /api/user/create` - Create new users (when needed)
+
+**Bot Authentication**: The bot uses `BOT_API_KEY` for secure API access via the `x-bot-api-key` header.
 
 ## Scheduling System
 
