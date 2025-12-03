@@ -1,0 +1,94 @@
+import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
+import { getMaxPlayersFromTeamSize } from '../utils/game.js';
+
+export function buildJoinSelectMenu(games, currentUserId) {
+  const options = [];
+
+  for (const game of games) {
+    if (!game || !game.gameId) continue;
+
+    const participants = game.participants || [];
+    const maxPlayers = getMaxPlayersFromTeamSize(game.teamSize);
+
+    if (game.gameState && game.gameState !== 'scheduled') continue;
+    if (maxPlayers && participants.length >= maxPlayers) continue;
+    if (participants.some((p) => p.discordId === currentUserId)) continue;
+
+    const rawDate = game.scheduledDateTimeString || game.scheduledDateTime;
+    const gameTime = new Date(rawDate).toLocaleString('en-US', {
+      timeZone: 'UTC',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    const playersValue = maxPlayers
+      ? `${participants.length}/${maxPlayers}`
+      : `${participants.length}`;
+
+    options.push({
+      label: `Game #${game.gameId} • ${game.teamSize} ${game.gameType}`,
+      description: `${gameTime} UTC • ${playersValue} players`,
+      value: String(game.id),
+    });
+
+    if (options.length >= 25) break;
+  }
+
+  if (options.length === 0) {
+    return null;
+  }
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('join_select')
+    .setPlaceholder('Choose a game to join')
+    .addOptions(options);
+
+  return new ActionRowBuilder().addComponents(select);
+}
+
+export function buildGamesSelectMenu(games) {
+  const options = [];
+
+  for (const game of games) {
+    if (!game || !game.gameId || !game.id) continue;
+
+    const rawDate = game.scheduledDateTimeString || game.scheduledDateTime;
+    const gameTime = new Date(rawDate).toLocaleString('en-US', {
+      timeZone: 'UTC',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    const participants = game.participants || [];
+    const maxPlayers = getMaxPlayersFromTeamSize(game.teamSize);
+    const playersValue = maxPlayers
+      ? `${participants.length}/${maxPlayers}`
+      : `${participants.length}`;
+
+    options.push({
+      label: `Game #${game.gameId} • ${game.teamSize} ${game.gameType}`,
+      description: `${gameTime} UTC • ${playersValue} players`,
+      value: String(game.id),
+    });
+
+    if (options.length >= 25) break;
+  }
+
+  if (options.length === 0) {
+    return null;
+  }
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('games_select')
+    .setPlaceholder('Choose a game to view details and join/leave')
+    .addOptions(options);
+
+  return new ActionRowBuilder().addComponents(select);
+}
+
