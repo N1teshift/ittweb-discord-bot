@@ -819,7 +819,7 @@ async function handleButton(interaction) {
 
     const timeInput = new TextInputBuilder()
       .setCustomId('game_time')
-      .setLabel('Game Time (e.g., "8pm", "20:00", "tomorrow 3pm")')
+      .setLabel('Game Time (e.g., 8pm, tomorrow 3pm)')
       .setPlaceholder('When should the game start?')
       .setStyle(TextInputStyle.Short)
       .setRequired(true)
