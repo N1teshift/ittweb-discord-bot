@@ -5,7 +5,8 @@ export const ITT_API_BASE = process.env.ITT_API_BASE || 'https://your-vercel-app
 export const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
 export const BOT_API_KEY = process.env.BOT_API_KEY;
 
-// Reminder settings
+// Reminder settings (disabled)
+export const REMINDERS_ENABLED = false;
 export const REMINDER_MINUTES_BEFORE = 10;
 export const MAX_REMINDER_WINDOW_MS = 6 * 60 * 60 * 1000; // 6 hours
 

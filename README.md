@@ -1,15 +1,34 @@
 # ITT Web Discord Bot
 
+> Date: 2025-12-03
+
 A Discord bot that extends the ITT Web tournament system functionality into Discord, allowing players to schedule, join, and leave games without visiting the website.
+
+## Related Project
+
+This Discord bot integrates with the **[ITT Web](https://github.com/N1teshift/ittweb)** tournament management system.
+
+**ITT Web** is a comprehensive website for Island Troll Tribes game statistics, guides, and community features, providing:
+
+- **Game Statistics**: Game tracking, ELO rating system, player profiles, leaderboards, and analytics
+- **Community Features**: Scheduled games, archive entries, blog posts, and game guides
+- **User Management**: Authentication system that Discord users are automatically linked to
+- **Tournament System**: Backend API and database that powers this Discord bot
+
+**Key Integration Points:**
+- **User Accounts**: Discord users are automatically linked to ITT Web accounts
+- **Game Management**: All tournament games and scheduling logic comes from ITT Web
+- **ELO System**: Player ratings and rankings are managed through ITT Web
+- **API Endpoints**: Bot uses ITT Web's REST API for all game operations
 
 ## Features
 
-- **/schedule <time>** - Schedule a new 1v1 ELO game (e.g., `/schedule 8pm`, `/schedule tomorrow 3pm`)
-- **/games** - List upcoming scheduled games
-- **/join <game_id>** - Join a scheduled game
-- **/leave <game_id>** - Leave a scheduled game
-- **Interactive buttons** - Click to join/leave games directly from Discord messages
+- **/games** - Browse and manage upcoming scheduled games, with option to schedule new games
+- **Interactive scheduling** - Multi-step game scheduling with dropdown menus for team size, game type, version, date, and time
+- **Interactive buttons** - Click to join/leave games directly from Discord messages and embeds
+- **Select menus** - Choose specific games to join or view details
 - **Auto user creation** - Automatically creates ITT accounts for new Discord users
+- **Game reminders** - Currently disabled (automatic reminders for upcoming games)
 
 ## Setup
 
@@ -89,54 +108,17 @@ The bot integrates with your existing ITT Web API endpoints:
 - `GET /api/games/{id}` - Get game details
 - `POST /api/user/create` - Create new users (when needed)
 
-## Time Parsing
+## Scheduling System
 
-The bot supports various time formats:
-- `8pm` - 8:00 PM today (or tomorrow if already passed)
-- `20:00` - 8:00 PM (24-hour format)
-- `tomorrow 3pm` - 3:00 PM tomorrow
-- `15:30` - 3:30 PM
+Games are scheduled through an interactive flow using Discord select menus:
 
-All times are converted to UTC for storage.
+1. **Select Team Size** - Choose from 1v1, 2v2, 3v3, 4v4, 5v5, 6v6
+2. **Select Game Type** - Normal or Elo (ranked)
+3. **Select Game Version** - v3.28, v3.27, v3.26
+4. **Select Date** - Choose from upcoming dates
+5. **Select Time** - Choose from available time slots in UTC
 
-## Development
-
-### Project Structure
-
-```
-src/
-  index.js          # Main bot file
-package.json        # Dependencies and scripts
-README.md          # This file
-.env               # Environment variables (create this)
-```
-
-### Adding New Commands
-
-1. Add command definition to the `commands` array in `index.js`
-2. Register the command in `registerCommands()` function
-3. Add command handler in `handleSlashCommand()` function
-
-### Button Interactions
-
-Buttons use custom IDs in format `action_gameId` (e.g., `join_123`, `details_123`).
-Add button handling logic in `handleButton()` function.
-
-## Troubleshooting
-
-### Bot Not Responding
-- Check if bot is online in Railway dashboard
-- Verify DISCORD_TOKEN is correct
-- Check Railway logs for errors
-
-### Commands Not Appearing
-- Commands take time to register (up to 1 hour globally)
-- For faster registration, set DISCORD_GUILD_ID and restart bot
-
-### API Errors
-- Check ITT_API_BASE URL is correct
-- Verify your Vercel API is accessible
-- Check Railway logs for API call errors
+All scheduled times are stored in UTC.
 
 ## License
 

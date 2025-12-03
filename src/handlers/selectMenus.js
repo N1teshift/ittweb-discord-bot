@@ -68,10 +68,10 @@ export async function handleSelectMenu(interaction) {
 
       await joinScheduledGame(user.id, user.displayName || user.username, gameId);
 
-      const updatedGame = await getGameById(gameId);
-      const updatedParticipants = updatedGame.participants || [];
+    const updatedGame = await getGameById(gameId);
+    const updatedParticipants = updatedGame.participants || [];
 
-      scheduleReminderForGame(user.id, updatedGame);
+    // scheduleReminderForGame(user.id, updatedGame); // DISABLED
 
       const embed = createGameEmbed(updatedGame, updatedParticipants);
       const buttons = createGameButtons(gameId, true);

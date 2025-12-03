@@ -154,7 +154,7 @@ async function handleJoinCommand(interaction, user) {
     const updatedGame = await getGameById(internalGameId);
     const updatedParticipants = updatedGame.participants || [];
 
-    scheduleReminderForGame(user.id, updatedGame);
+    // scheduleReminderForGame(user.id, updatedGame); // DISABLED
 
     const embed = createGameEmbed(updatedGame, updatedParticipants);
     const buttons = createGameButtons(internalGameId, true);
