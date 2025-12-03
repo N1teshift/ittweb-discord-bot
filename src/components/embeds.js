@@ -1,21 +1,11 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { ITT_API_BASE } from '../config.js';
 import { getMaxPlayersFromTeamSize } from '../utils/game.js';
-import { formatTimeUntil } from '../utils/time.js';
+import { formatGameTime, formatTimeUntil } from '../utils/format.js';
 
 export function createGameEmbed(game, participants = []) {
   const rawDate = game.scheduledDateTimeString || game.scheduledDateTime;
-  const gameDate = new Date(rawDate);
-
-  const gameTime = gameDate.toLocaleString('en-US', {
-    timeZone: 'UTC',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  });
+  const gameTime = formatGameTime(rawDate);
 
   const maxPlayers = getMaxPlayersFromTeamSize(game.teamSize);
   const playersValue = maxPlayers

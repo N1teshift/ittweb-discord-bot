@@ -82,4 +82,6 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // Login to Discord
+console.log('Token length:', DISCORD_TOKEN ? DISCORD_TOKEN.length : 'null');
+console.log('Token start:', DISCORD_TOKEN ? DISCORD_TOKEN.substring(0, 5) : 'null');
 client.login(DISCORD_TOKEN);

@@ -5,6 +5,14 @@ export const ITT_API_BASE = process.env.ITT_API_BASE || 'https://your-vercel-app
 export const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
 export const BOT_API_KEY = process.env.BOT_API_KEY;
 
+// Firebase Configuration
+export const FIREBASE_SERVICE_ACCOUNT_KEY = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+export const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID;
+
+// Game Settings
+export const DEFAULT_GAME_LENGTH = 1800; // 30 minutes
+export const DEFAULT_TIMEZONE = 'UTC';
+
 // Reminder settings (disabled)
 export const REMINDERS_ENABLED = false;
 export const REMINDER_MINUTES_BEFORE = 10;

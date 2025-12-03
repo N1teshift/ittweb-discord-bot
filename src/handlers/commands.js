@@ -11,20 +11,31 @@ import { getMaxPlayersFromTeamSize } from '../utils/game.js';
 import { createGameEmbed, createGameButtons } from '../components/embeds.js';
 import { buildJoinSelectMenu, buildGamesSelectMenu } from '../components/menus.js';
 import { scheduleReminderForGame } from './reminders.js';
+import { logger } from '../utils/logger.js';
+import { formatGameTime } from '../utils/format.js';
 
 export async function handleSlashCommand(interaction) {
   const { commandName, user } = interaction;
 
-  switch (commandName) {
-    case 'games':
-      await handleGamesCommand(interaction, user);
-      break;
-    case 'join':
-      await handleJoinCommand(interaction, user);
-      break;
-    case 'leave':
-      await handleLeaveCommand(interaction, user);
-      break;
+  try {
+    switch (commandName) {
+      case 'games':
+        await handleGamesCommand(interaction, user);
+        break;
+      case 'join':
+        await handleJoinCommand(interaction, user);
+        break;
+      case 'leave':
+        await handleLeaveCommand(interaction, user);
+        break;
+    }
+  } catch (error) {
+    logger.error(`Error handling command ${commandName}`, error);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An unexpected error occurred.', ephemeral: true });
+    } else {
+      await interaction.followUp({ content: 'An unexpected error occurred.', ephemeral: true });
+    }
   }
 }
 
@@ -48,14 +59,7 @@ async function handleGamesCommand(interaction, user) {
     let description = '';
     for (const game of games.slice(0, 10)) {
       const rawDate = game.scheduledDateTimeString || game.scheduledDateTime;
-      const gameTime = new Date(rawDate).toLocaleString('en-US', {
-        timeZone: 'UTC',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
+      const gameTime = formatGameTime(rawDate);
 
       const participants = game.participants || [];
       const maxPlayers = getMaxPlayersFromTeamSize(game.teamSize);
@@ -84,6 +88,7 @@ async function handleGamesCommand(interaction, user) {
       components: selectRow ? [selectRow, scheduleButton] : [scheduleButton],
     });
   } catch (error) {
+    logger.error('Failed to fetch games', error);
     await interaction.editReply({ content: `❌ Failed to fetch games: ${error.message}` });
   }
 }
@@ -154,7 +159,8 @@ async function handleJoinCommand(interaction, user) {
     const updatedGame = await getGameById(internalGameId);
     const updatedParticipants = updatedGame.participants || [];
 
-    // scheduleReminderForGame(user.id, updatedGame); // DISABLED
+    // Schedule reminder
+    await scheduleReminderForGame(user.id, updatedGame);
 
     const embed = createGameEmbed(updatedGame, updatedParticipants);
     const buttons = createGameButtons(internalGameId, true);
@@ -164,7 +170,11 @@ async function handleJoinCommand(interaction, user) {
       embeds: [embed],
       components: [buttons],
     });
+
+    logger.info(`User ${user.username} joined game ${internalGameId}`);
+
   } catch (error) {
+    logger.error('Failed to join game', error);
     await interaction.editReply({ content: `❌ Failed to join game: ${error.message}` });
   }
 }
@@ -216,7 +226,11 @@ async function handleLeaveCommand(interaction, user) {
       embeds: [embed],
       components: [buttons],
     });
+
+    logger.info(`User ${user.username} left game ${internalGameId}`);
+
   } catch (error) {
+    logger.error('Failed to leave game', error);
     await interaction.editReply({ content: `❌ Failed to leave game: ${error.message}` });
   }
 }

@@ -2,47 +2,81 @@ import { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle }
 import { TEAM_SIZE_OPTIONS, GAME_TYPE_OPTIONS, GAME_VERSION_OPTIONS } from '../config.js';
 import { getDateOptions, getTimeOptions } from '../utils/time.js';
 import { createScheduledGame } from '../api.js';
+import { db } from '../firebase.js';
+import { logger } from '../utils/logger.js';
+import { formatGameTime } from '../utils/format.js';
 
-// Temporary storage for schedule flow state
-export const scheduleFlowState = new Map();
+const COLLECTION_NAME = 'discord_bot_states';
+
+// Helper to get state from Firestore
+async function getScheduleState(userId) {
+  if (!db) return {};
+  try {
+    const doc = await db.collection(COLLECTION_NAME).doc(userId).get();
+    return doc.exists ? doc.data() : {};
+  } catch (error) {
+    logger.error(`Failed to get schedule state for user ${userId}`, error);
+    return {};
+  }
+}
+
+// Helper to save state to Firestore
+async function saveScheduleState(userId, state) {
+  if (!db) return;
+  try {
+    await db.collection(COLLECTION_NAME).doc(userId).set(state, { merge: true });
+  } catch (error) {
+    logger.error(`Failed to save schedule state for user ${userId}`, error);
+  }
+}
+
+// Helper to clear state from Firestore
+export async function clearScheduleState(userId) {
+  if (!db) return;
+  try {
+    await db.collection(COLLECTION_NAME).doc(userId).delete();
+  } catch (error) {
+    logger.error(`Failed to clear schedule state for user ${userId}`, error);
+  }
+}
 
 export async function handleScheduleSelectMenu(interaction) {
   const { customId, values, user } = interaction;
   const selectedValue = values[0];
 
-  let state = scheduleFlowState.get(user.id) || {};
+  let state = await getScheduleState(user.id);
 
   if (customId === 'schedule_team_size') {
     state.teamSize = selectedValue;
-    scheduleFlowState.set(user.id, state);
+    await saveScheduleState(user.id, state);
     await updateScheduleStep1(interaction, state);
     return;
   }
 
   if (customId === 'schedule_game_type') {
     state.gameType = selectedValue;
-    scheduleFlowState.set(user.id, state);
+    await saveScheduleState(user.id, state);
     await updateScheduleStep1(interaction, state);
     return;
   }
 
   if (customId === 'schedule_game_version') {
     state.gameVersion = selectedValue;
-    scheduleFlowState.set(user.id, state);
+    await saveScheduleState(user.id, state);
     await updateScheduleStep1(interaction, state);
     return;
   }
 
   if (customId === 'schedule_date') {
     state.date = selectedValue;
-    scheduleFlowState.set(user.id, state);
+    await saveScheduleState(user.id, state);
     await updateScheduleStep2(interaction, state);
     return;
   }
 
   if (customId === 'schedule_time') {
     state.time = selectedValue;
-    scheduleFlowState.set(user.id, state);
+    await saveScheduleState(user.id, state);
 
     if (state.teamSize && state.gameType && state.gameVersion && state.date && state.time) {
       await finalizeScheduleGame(interaction, state, user);
@@ -174,24 +208,19 @@ async function finalizeScheduleGame(interaction, state, user) {
       []
     );
 
-    scheduleFlowState.delete(user.id);
+    await clearScheduleState(user.id);
 
-    const gameTime = scheduleDate.toLocaleString('en-US', {
-      timeZone: 'UTC',
-      weekday: 'long',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
+    const gameTime = formatGameTime(scheduleDate);
 
     await interaction.update({
       content: `✅ **Game Scheduled Successfully!**\n\n🎮 **Game #${gameId}**\n📋 ${state.teamSize} ${state.gameType} (${state.gameVersion})\n⏰ ${gameTime} UTC`,
       components: [],
     });
+
+    logger.info(`Game scheduled by ${user.username}`, { gameId, userId: user.id });
+
   } catch (error) {
-    console.error('Failed to schedule game:', error);
+    logger.error('Failed to schedule game', error);
     await interaction.update({
       content: `❌ Failed to schedule game: ${error.message}`,
       components: [],

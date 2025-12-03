@@ -7,6 +7,7 @@ import { getMaxPlayersFromTeamSize } from '../utils/game.js';
 import { createGameEmbed, createGameButtons } from '../components/embeds.js';
 import { handleScheduleSelectMenu } from './schedule.js';
 import { scheduleReminderForGame } from './reminders.js';
+import { logger } from '../utils/logger.js';
 
 export async function handleSelectMenu(interaction) {
   const { customId, values, user } = interaction;
@@ -68,10 +69,10 @@ export async function handleSelectMenu(interaction) {
 
       await joinScheduledGame(user.id, user.displayName || user.username, gameId);
 
-    const updatedGame = await getGameById(gameId);
-    const updatedParticipants = updatedGame.participants || [];
+      const updatedGame = await getGameById(gameId);
+      const updatedParticipants = updatedGame.participants || [];
 
-    // scheduleReminderForGame(user.id, updatedGame); // DISABLED
+      await scheduleReminderForGame(user.id, updatedGame);
 
       const embed = createGameEmbed(updatedGame, updatedParticipants);
       const buttons = createGameButtons(gameId, true);
@@ -81,12 +82,14 @@ export async function handleSelectMenu(interaction) {
         embeds: [embed],
         components: [buttons],
       });
+
+      logger.info(`User ${user.username} joined game ${gameId} via select menu`);
       return;
     }
   } catch (error) {
+    logger.error('Failed to handle select menu', error);
     await interaction.editReply({
       content: `❌ Failed to join game: ${error.message}`,
     });
   }
 }
-

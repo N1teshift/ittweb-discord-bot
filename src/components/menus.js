@@ -1,5 +1,6 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { getMaxPlayersFromTeamSize } from '../utils/game.js';
+import { formatGameTime } from '../utils/format.js';
 
 export function buildJoinSelectMenu(games, currentUserId) {
   const options = [];
@@ -15,14 +16,7 @@ export function buildJoinSelectMenu(games, currentUserId) {
     if (participants.some((p) => p.discordId === currentUserId)) continue;
 
     const rawDate = game.scheduledDateTimeString || game.scheduledDateTime;
-    const gameTime = new Date(rawDate).toLocaleString('en-US', {
-      timeZone: 'UTC',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
+    const gameTime = formatGameTime(rawDate);
 
     const playersValue = maxPlayers
       ? `${participants.length}/${maxPlayers}`
@@ -56,14 +50,7 @@ export function buildGamesSelectMenu(games) {
     if (!game || !game.gameId || !game.id) continue;
 
     const rawDate = game.scheduledDateTimeString || game.scheduledDateTime;
-    const gameTime = new Date(rawDate).toLocaleString('en-US', {
-      timeZone: 'UTC',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
+    const gameTime = formatGameTime(rawDate);
 
     const participants = game.participants || [];
     const maxPlayers = getMaxPlayersFromTeamSize(game.teamSize);

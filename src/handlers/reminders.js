@@ -1,19 +1,18 @@
 import { REMINDER_MINUTES_BEFORE, MAX_REMINDER_WINDOW_MS } from '../config.js';
+import { db } from '../firebase.js';
+import { logger } from '../utils/logger.js';
 
-// In-memory reminder registry (lost when bot restarts)
-const reminderRegistry = new Map();
-
+const COLLECTION_NAME = 'discord_bot_reminders';
 let clientInstance = null;
 
 export function setClient(client) {
   clientInstance = client;
+  // Initialize reminder check loop
+  setInterval(checkReminders, 60 * 1000); // Check every minute
 }
 
-export function scheduleReminderForGame(userId, game) {
-  if (!clientInstance) {
-    console.error('Client not set for reminders');
-    return;
-  }
+export async function scheduleReminderForGame(userId, game) {
+  if (!db) return;
 
   try {
     const rawDate = game.scheduledDateTimeString || game.scheduledDateTime;
@@ -29,35 +28,56 @@ export function scheduleReminderForGame(userId, game) {
       return;
     }
 
-    const gameId = game.gameId || game.id;
-    if (!gameId) return;
+    const gameId = String(game.gameId || game.id);
+    const reminderId = `${userId}_${gameId}`;
 
-    const key = String(userId);
-    const existing = reminderRegistry.get(key) || [];
-    existing.push({
-      gameId: String(gameId),
+    await db.collection(COLLECTION_NAME).doc(reminderId).set({
+      userId,
+      gameId,
       gameTimeMs,
       reminderTimeMs,
+      status: 'pending'
     });
-    reminderRegistry.set(key, existing);
 
-    setTimeout(async () => {
-      try {
-        const user = await clientInstance.users.fetch(userId);
-        const gid = game.gameId || game.id || 'unknown';
-        await user.send(`⏰ Reminder: Game #${gid} starts in ${REMINDER_MINUTES_BEFORE} minutes.`);
+    logger.info(`Scheduled reminder for user ${userId} game ${gameId}`);
 
-        const list = reminderRegistry.get(key) || [];
-        reminderRegistry.set(
-          key,
-          list.filter((r) => r.gameId !== String(gid))
-        );
-      } catch (err) {
-        console.error('Failed to send reminder DM', err);
-      }
-    }, delayMs);
   } catch (err) {
-    console.error('Failed to schedule reminder', err);
+    logger.error('Failed to schedule reminder', err);
+  }
+}
+
+async function checkReminders() {
+  if (!clientInstance || !db) return;
+
+  try {
+    const now = Date.now();
+    const snapshot = await db.collection(COLLECTION_NAME)
+      .where('status', '==', 'pending')
+      .where('reminderTimeMs', '<=', now)
+      .get();
+
+    if (snapshot.empty) return;
+
+    const batch = db.batch();
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      try {
+        const user = await clientInstance.users.fetch(data.userId);
+        await user.send(`⏰ Reminder: Game #${data.gameId} starts in ${REMINDER_MINUTES_BEFORE} minutes.`);
+
+        batch.update(doc.ref, { status: 'sent', sentAt: now });
+      } catch (err) {
+        logger.error(`Failed to send reminder to ${data.userId}`, err);
+        // Mark as failed so we don't retry forever
+        batch.update(doc.ref, { status: 'failed', error: err.message });
+      }
+    }
+
+    await batch.commit();
+
+  } catch (error) {
+    logger.error('Error checking reminders', error);
   }
 }
 
