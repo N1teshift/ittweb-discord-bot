@@ -55,8 +55,8 @@ Create a `.env` file in the project root:
 DISCORD_TOKEN=your_bot_token_here
 DISCORD_CLIENT_ID=your_application_id_here
 ITT_API_BASE=https://your-vercel-app.vercel.app
-BOT_API_KEY=your_bot_api_key_here
 DISCORD_GUILD_ID=your_server_id_here (optional, for faster command registration)
+BOT_API_KEY
 ```
 
 ### 4. Install Dependencies
