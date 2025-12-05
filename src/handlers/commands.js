@@ -49,8 +49,23 @@ async function handleGamesCommand(interaction, user) {
   try {
     const games = await getScheduledGames();
 
+    const scheduleButton = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('schedule_game')
+        .setLabel('📅 Schedule New Game')
+        .setStyle(ButtonStyle.Primary)
+    );
+
     if (games.length === 0) {
-      await interaction.editReply({ content: 'No upcoming games scheduled.' });
+      const embed = new EmbedBuilder()
+        .setTitle('🎮 Upcoming Games')
+        .setDescription('No upcoming games scheduled.')
+        .setColor(0x0099ff);
+
+      await interaction.editReply({
+        embeds: [embed],
+        components: [scheduleButton],
+      });
       return;
     }
 
@@ -76,12 +91,6 @@ async function handleGamesCommand(interaction, user) {
     embed.setDescription(description);
 
     const selectRow = buildGamesSelectMenu(games);
-    const scheduleButton = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('schedule_game')
-        .setLabel('📅 Schedule New Game')
-        .setStyle(ButtonStyle.Primary)
-    );
 
     await interaction.editReply({
       embeds: [embed],
