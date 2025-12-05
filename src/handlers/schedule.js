@@ -49,6 +49,8 @@ export async function handleScheduleSelectMenu(interaction) {
   if (customId === 'schedule_team_size') {
     state.teamSize = selectedValue;
     await saveScheduleState(user.id, state);
+    // Re-read state to ensure we have the complete, latest state
+    state = await getScheduleState(user.id);
     await updateScheduleStep1(interaction, state);
     return;
   }
@@ -56,6 +58,8 @@ export async function handleScheduleSelectMenu(interaction) {
   if (customId === 'schedule_game_type') {
     state.gameType = selectedValue;
     await saveScheduleState(user.id, state);
+    // Re-read state to ensure we have the complete, latest state
+    state = await getScheduleState(user.id);
     await updateScheduleStep1(interaction, state);
     return;
   }
@@ -63,6 +67,8 @@ export async function handleScheduleSelectMenu(interaction) {
   if (customId === 'schedule_game_version') {
     state.gameVersion = selectedValue;
     await saveScheduleState(user.id, state);
+    // Re-read state to ensure we have the complete, latest state
+    state = await getScheduleState(user.id);
     await updateScheduleStep1(interaction, state);
     return;
   }
@@ -70,6 +76,8 @@ export async function handleScheduleSelectMenu(interaction) {
   if (customId === 'schedule_date') {
     state.date = selectedValue;
     await saveScheduleState(user.id, state);
+    // Re-read state to ensure we have the complete, latest state
+    state = await getScheduleState(user.id);
     await updateScheduleStep2(interaction, state);
     return;
   }
@@ -77,6 +85,8 @@ export async function handleScheduleSelectMenu(interaction) {
   if (customId === 'schedule_time') {
     state.time = selectedValue;
     await saveScheduleState(user.id, state);
+    // Re-read state to ensure we have the complete, latest state
+    state = await getScheduleState(user.id);
 
     if (state.teamSize && state.gameType && state.gameVersion && state.date && state.time) {
       await finalizeScheduleGame(interaction, state, user);
