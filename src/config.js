@@ -13,8 +13,8 @@ export const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID;
 export const DEFAULT_GAME_LENGTH = 1800; // 30 minutes
 export const DEFAULT_TIMEZONE = 'UTC';
 
-// Reminder settings (disabled)
-export const REMINDERS_ENABLED = false;
+// Reminder settings
+export const REMINDERS_ENABLED = true;
 export const REMINDER_MINUTES_BEFORE = 10;
 export const MAX_REMINDER_WINDOW_MS = 6 * 60 * 60 * 1000; // 6 hours
 
