@@ -2,12 +2,9 @@ import { MessageFlags } from 'discord.js';
 import {
   ensureUserExists,
   getGameById,
-  joinScheduledGame,
 } from '../api.js';
-import { getMaxPlayersFromTeamSize } from '../utils/game.js';
 import { createGameEmbed, createGameButtons } from '../components/embeds.js';
 import { handleScheduleSelectMenu } from './schedule.js';
-import { scheduleReminderForGame } from './reminders.js';
 import { logger } from '../utils/logger.js';
 
 export async function handleSelectMenu(interaction) {
@@ -44,49 +41,6 @@ export async function handleSelectMenu(interaction) {
       return;
     }
 
-    // join_select: auto-join the selected game
-    if (customId === 'join_select') {
-      const game = await getGameById(gameId);
-      if (game.gameState !== 'scheduled') {
-        await interaction.editReply({
-          content: '❌ This game is no longer scheduled for joining.',
-        });
-        return;
-      }
-
-      const participants = game.participants || [];
-      if (participants.some((p) => p.discordId === user.id)) {
-        await interaction.editReply({
-          content: '❌ You are already participating in this game.',
-        });
-        return;
-      }
-
-      const maxPlayers = getMaxPlayersFromTeamSize(game.teamSize);
-      if (maxPlayers && participants.length >= maxPlayers) {
-        await interaction.editReply({ content: '❌ This game is already full.' });
-        return;
-      }
-
-      await joinScheduledGame(user.id, user.displayName || user.username, gameId);
-
-      const updatedGame = await getGameById(gameId);
-      const updatedParticipants = updatedGame.participants || [];
-
-      await scheduleReminderForGame(user.id, updatedGame);
-
-      const embed = createGameEmbed(updatedGame, updatedParticipants);
-      const buttons = createGameButtons(gameId, true);
-
-      await interaction.editReply({
-        content: '✅ Successfully joined the game!',
-        embeds: [embed],
-        components: [buttons],
-      });
-
-      logger.info(`User ${user.username} joined game ${gameId} via select menu`);
-      return;
-    }
   } catch (error) {
     logger.error('Failed to handle select menu', error);
     await interaction.editReply({

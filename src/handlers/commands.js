@@ -3,14 +3,9 @@ import {
   ensureUserExists,
   getScheduledGames,
   getGameById,
-  getScheduledGameByPublicId,
-  joinScheduledGame,
-  leaveScheduledGame,
 } from '../api.js';
 import { getMaxPlayersFromTeamSize } from '../utils/game.js';
-import { createGameEmbed, createGameButtons } from '../components/embeds.js';
-import { buildJoinSelectMenu, buildGamesSelectMenu } from '../components/menus.js';
-import { scheduleReminderForGame } from './reminders.js';
+import { buildGamesSelectMenu } from '../components/menus.js';
 import { logger } from '../utils/logger.js';
 import { formatGameTime } from '../utils/format.js';
 
@@ -21,12 +16,6 @@ export async function handleSlashCommand(interaction) {
     switch (commandName) {
       case 'games':
         await handleGamesCommand(interaction, user);
-        break;
-      case 'join':
-        await handleJoinCommand(interaction, user);
-        break;
-      case 'leave':
-        await handleLeaveCommand(interaction, user);
         break;
     }
   } catch (error) {
@@ -102,145 +91,4 @@ async function handleGamesCommand(interaction, user) {
   }
 }
 
-async function handleJoinCommand(interaction, user) {
-  const gameId = interaction.options.getString('game_id');
-
-  if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  }
-
-  await ensureUserExists(user.id, user.displayName || user.username);
-
-  try {
-    if (!gameId) {
-      const games = await getScheduledGames();
-      const selectRow = buildJoinSelectMenu(games, user.id);
-
-      if (!selectRow) {
-        await interaction.editReply({
-          content: 'There are no joinable scheduled games right now.',
-        });
-        return;
-      }
-
-      await interaction.editReply({
-        content: 'Select a game to join:',
-        components: [selectRow],
-      });
-      return;
-    }
-
-    let game;
-    let internalGameId = gameId;
-
-    if (/^\d+$/.test(gameId)) {
-      game = await getScheduledGameByPublicId(parseInt(gameId, 10));
-      internalGameId = game.id;
-    } else {
-      game = await getGameById(gameId);
-      internalGameId = game.id || gameId;
-    }
-
-    if (game.gameState !== 'scheduled') {
-      await interaction.editReply({
-        content: '❌ This game is not currently scheduled for joining.',
-      });
-      return;
-    }
-
-    const participants = game.participants || [];
-    if (participants.some((p) => p.discordId === user.id)) {
-      await interaction.editReply({
-        content: '❌ You are already participating in this game.',
-      });
-      return;
-    }
-
-    if (participants.length >= 2) {
-      await interaction.editReply({
-        content: '❌ This game is already full (2 players maximum).',
-      });
-      return;
-    }
-
-    await joinScheduledGame(user.id, user.displayName || user.username, internalGameId);
-
-    const updatedGame = await getGameById(internalGameId);
-    const updatedParticipants = updatedGame.participants || [];
-
-    // Schedule reminder
-    await scheduleReminderForGame(user.id, updatedGame);
-
-    const embed = createGameEmbed(updatedGame, updatedParticipants);
-    const buttons = createGameButtons(internalGameId, true);
-
-    await interaction.editReply({
-      content: '✅ Successfully joined the game!',
-      embeds: [embed],
-      components: [buttons],
-    });
-
-    logger.info(`User ${user.username} joined game ${internalGameId}`);
-
-  } catch (error) {
-    logger.error('Failed to join game', error);
-    await interaction.editReply({ content: `❌ Failed to join game: ${error.message}` });
-  }
-}
-
-async function handleLeaveCommand(interaction, user) {
-  const gameId = interaction.options.getString('game_id');
-
-  if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  }
-
-  await ensureUserExists(user.id, user.displayName || user.username);
-
-  try {
-    let game;
-    let internalGameId = gameId;
-
-    if (/^\d+$/.test(gameId)) {
-      game = await getScheduledGameByPublicId(parseInt(gameId, 10));
-      internalGameId = game.id;
-    } else {
-      game = await getGameById(gameId);
-      internalGameId = game.id || gameId;
-    }
-
-    if (game.gameState !== 'scheduled') {
-      await interaction.editReply({ content: '❌ This game is not currently scheduled.' });
-      return;
-    }
-
-    const participants = game.participants || [];
-    if (!participants.some((p) => p.discordId === user.id)) {
-      await interaction.editReply({
-        content: '❌ You are not participating in this game.',
-      });
-      return;
-    }
-
-    await leaveScheduledGame(user.id, internalGameId);
-
-    const updatedGame = await getGameById(internalGameId);
-    const updatedParticipants = updatedGame.participants || [];
-
-    const embed = createGameEmbed(updatedGame, updatedParticipants);
-    const buttons = createGameButtons(internalGameId, false);
-
-    await interaction.editReply({
-      content: '✅ Successfully left the game.',
-      embeds: [embed],
-      components: [buttons],
-    });
-
-    logger.info(`User ${user.username} left game ${internalGameId}`);
-
-  } catch (error) {
-    logger.error('Failed to leave game', error);
-    await interaction.editReply({ content: `❌ Failed to leave game: ${error.message}` });
-  }
-}
 
