@@ -25,25 +25,6 @@ export function formatGameTime(dateInput, timeZone = 'UTC') {
 }
 
 /**
- * Format a date to just the time component
- * @param {string|Date} dateInput 
- * @param {string} timeZone 
- * @returns {string} Formatted time string
- */
-export function formatTimeOnly(dateInput, timeZone = 'UTC') {
-    if (!dateInput) return 'Unknown Time';
-
-    const date = new Date(dateInput);
-
-    return date.toLocaleString('en-US', {
-        timeZone,
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-    });
-}
-
-/**
  * Format relative time (e.g. "in 2h 30m" or "5m ago")
  * @param {string|Date} dateInput 
  * @returns {string} Relative time string

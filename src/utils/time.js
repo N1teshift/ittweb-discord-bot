@@ -65,26 +65,6 @@ export function parseTimeToUTC(timeString) {
   return targetTime.toISOString();
 }
 
-// Format relative time until a date
-export function formatTimeUntil(dateInput) {
-  const target = new Date(dateInput);
-  const now = new Date();
-  const diffMs = target.getTime() - now.getTime();
-
-  const minutesTotal = Math.round(Math.abs(diffMs) / 60000);
-  const hours = Math.floor(minutesTotal / 60);
-  const minutes = minutesTotal % 60;
-
-  const parts = [];
-  if (hours > 0) parts.push(`${hours}h`);
-  if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`);
-
-  if (diffMs > 0) {
-    return `in ${parts.join(' ')}`;
-  }
-  return `${parts.join(' ')} ago`;
-}
-
 // Generate date options for the next 7 days
 export function getDateOptions() {
   const options = [];
