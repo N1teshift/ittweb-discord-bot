@@ -1,4 +1,4 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import {
   ensureUserExists,
   getScheduledGames,
@@ -32,16 +32,16 @@ export async function handleSlashCommand(interaction) {
   } catch (error) {
     logger.error(`Error handling command ${commandName}`, error);
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: 'An unexpected error occurred.', ephemeral: true });
+      await interaction.reply({ content: 'An unexpected error occurred.', flags: MessageFlags.Ephemeral });
     } else {
-      await interaction.followUp({ content: 'An unexpected error occurred.', ephemeral: true });
+      await interaction.followUp({ content: 'An unexpected error occurred.', flags: MessageFlags.Ephemeral });
     }
   }
 }
 
 async function handleGamesCommand(interaction, user) {
   if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   }
 
   await ensureUserExists(user.id, user.displayName || user.username);
@@ -106,7 +106,7 @@ async function handleJoinCommand(interaction, user) {
   const gameId = interaction.options.getString('game_id');
 
   if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   }
 
   await ensureUserExists(user.id, user.displayName || user.username);
@@ -192,7 +192,7 @@ async function handleLeaveCommand(interaction, user) {
   const gameId = interaction.options.getString('game_id');
 
   if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   }
 
   await ensureUserExists(user.id, user.displayName || user.username);

@@ -7,14 +7,6 @@ let db = null;
 let isInitialized = false;
 
 try {
-    // Log configuration status (without exposing sensitive data)
-    logger.info('Firebase initialization starting', {
-        hasServiceAccountKey: !!FIREBASE_SERVICE_ACCOUNT_KEY,
-        hasProjectId: !!FIREBASE_PROJECT_ID,
-        projectId: FIREBASE_PROJECT_ID || 'not set',
-        existingApps: getApps().length
-    });
-
     if (getApps().length === 0) {
         if (FIREBASE_SERVICE_ACCOUNT_KEY) {
             try {
@@ -34,10 +26,6 @@ try {
                     credential: cert(serviceAccount),
                     projectId: FIREBASE_PROJECT_ID || serviceAccount.project_id
                 });
-                logger.info('Firebase Admin initialized with service account', {
-                    projectId: FIREBASE_PROJECT_ID || serviceAccount.project_id,
-                    clientEmail: serviceAccount.client_email
-                });
             } catch (parseError) {
                 logger.error('Failed to parse or validate FIREBASE_SERVICE_ACCOUNT_KEY', parseError, {
                     errorType: parseError.name,
@@ -50,29 +38,25 @@ try {
             initializeApp({
                 projectId: FIREBASE_PROJECT_ID
             });
-            logger.info('Firebase Admin initialized with default credentials', {
-                projectId: FIREBASE_PROJECT_ID
-            });
         } else {
             const error = new Error('FIREBASE_PROJECT_ID is required but not set. Also, FIREBASE_SERVICE_ACCOUNT_KEY is not set.');
             logger.error('Firebase configuration missing', error);
             throw error;
         }
-    } else {
-        logger.info('Firebase Admin app already initialized');
     }
 
     db = getFirestore();
     db.settings({ ignoreUndefinedProperties: true });
     
     isInitialized = true;
-    logger.info('Firebase Firestore initialized successfully');
+    
+    // Only log if Firebase is properly configured
+    if (FIREBASE_SERVICE_ACCOUNT_KEY || FIREBASE_PROJECT_ID) {
+        console.log('✓ Firebase initialized');
+    }
 
-    // Test the connection asynchronously (non-blocking)
+    // Test the connection asynchronously (non-blocking, silent on success)
     db.collection('_health_check').limit(1).get()
-        .then(() => {
-            logger.info('Firebase Firestore connection verified successfully');
-        })
         .catch((error) => {
             logger.error('Firebase Firestore connection test failed', error, {
                 errorCode: error.code,

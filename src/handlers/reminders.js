@@ -1,4 +1,4 @@
-import { REMINDER_MINUTES_BEFORE, MAX_REMINDER_WINDOW_MS } from '../config.js';
+import { REMINDER_MINUTES_BEFORE, MAX_REMINDER_WINDOW_MS, REMINDERS_ENABLED } from '../config.js';
 import { db, isInitialized } from '../firebase.js';
 import { logger } from '../utils/logger.js';
 
@@ -7,8 +7,10 @@ let clientInstance = null;
 
 export function setClient(client) {
   clientInstance = client;
-  // Initialize reminder check loop
-  setInterval(checkReminders, 60 * 1000); // Check every minute
+  // Initialize reminder check loop only if reminders are enabled
+  if (REMINDERS_ENABLED) {
+    setInterval(checkReminders, 60 * 1000); // Check every minute
+  }
 }
 
 export async function scheduleReminderForGame(userId, game) {
@@ -50,7 +52,7 @@ export async function scheduleReminderForGame(userId, game) {
 }
 
 async function checkReminders() {
-  if (!clientInstance || !db || !isInitialized) {
+  if (!REMINDERS_ENABLED || !clientInstance || !db || !isInitialized) {
     return;
   }
 

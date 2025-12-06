@@ -1,5 +1,30 @@
+// Suppress punycode deprecation warning (from dependencies)
+// This warning comes from transitive dependencies and cannot be fixed directly
+// We suppress it until the dependency maintainers update their code
+const originalEmitWarning = process.emitWarning;
+process.emitWarning = function(warning, type, code, ctor) {
+  const message = typeof warning === 'string' ? warning : warning?.message || '';
+  
+  // Suppress punycode deprecation (from dependencies - not fixable by us)
+  if (message.includes('punycode')) {
+    return;
+  }
+  
+  // Emit all other warnings normally
+  return originalEmitWarning.call(process, warning, type, code, ctor);
+};
+
+// Also listen to warning events as a backup
+process.on('warning', (warning) => {
+  // Suppress punycode deprecation (from dependencies)
+  if (warning.name === 'DeprecationWarning' && warning.message.includes('punycode')) {
+    return;
+  }
+  // Let other warnings through
+});
+
 import 'dotenv/config';
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, Events, MessageFlags } from 'discord.js';
 import { DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID } from './config.js';
 import { handleSlashCommand } from './handlers/commands.js';
 import { handleButton } from './handlers/buttons.js';
@@ -43,11 +68,15 @@ async function registerCommands() {
 }
 
 // Event handlers
-client.on('ready', () => {
+const onReady = () => {
   console.log(`Logged in as ${client.user.tag}!`);
   setClient(client);
   registerCommands();
-});
+};
+
+// Use Events.ClientReady (the proper way in Discord.js v14+)
+// This fixes the deprecation warning instead of just hiding it
+client.on(Events.ClientReady, onReady);
 
 client.on('interactionCreate', async (interaction) => {
   try {
@@ -67,12 +96,12 @@ client.on('interactionCreate', async (interaction) => {
       if (interaction.deferred || interaction.replied) {
         await interaction.followUp({
           content: 'An error occurred while processing your request.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       } else {
         await interaction.reply({
           content: 'An error occurred while processing your request.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
     } catch (innerError) {
@@ -82,6 +111,4 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // Login to Discord
-console.log('Token length:', DISCORD_TOKEN ? DISCORD_TOKEN.length : 'null');
-console.log('Token start:', DISCORD_TOKEN ? DISCORD_TOKEN.substring(0, 5) : 'null');
 client.login(DISCORD_TOKEN);

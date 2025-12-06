@@ -1,3 +1,4 @@
+import { MessageFlags } from 'discord.js';
 import {
   ensureUserExists,
   getGameById,
@@ -24,7 +25,7 @@ export async function handleSelectMenu(interaction) {
 
   try {
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     }
 
     // games_select: show details + join/leave buttons

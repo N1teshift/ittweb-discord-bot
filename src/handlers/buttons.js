@@ -1,4 +1,4 @@
-import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
+import { ActionRowBuilder, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { TEAM_SIZE_OPTIONS, GAME_TYPE_OPTIONS, GAME_VERSION_OPTIONS } from '../config.js';
 import { getDateOptions, getTimeOptions } from '../utils/time.js';
 import { getMaxPlayersFromTeamSize } from '../utils/game.js';
@@ -47,7 +47,7 @@ export async function handleButton(interaction) {
     await interaction.reply({
       content: '📅 **Schedule a New Game - Step 1/2**\nSelect your game settings below:',
       components: [row1, row2, row3],
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -94,7 +94,7 @@ export async function handleButton(interaction) {
     try {
       await interaction.followUp({
         content: `❌ Error: ${error.message}`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     } catch (innerError) {
       logger.error('Failed to send button error response', innerError);
@@ -107,7 +107,7 @@ async function handleJoinButton(interaction, user, gameId) {
   if (game.gameState !== 'scheduled') {
     await interaction.followUp({
       content: '❌ This game is no longer scheduled for joining.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -116,7 +116,7 @@ async function handleJoinButton(interaction, user, gameId) {
   if (participants.some((p) => p.discordId === user.id)) {
     await interaction.followUp({
       content: '❌ You are already participating in this game.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -125,7 +125,7 @@ async function handleJoinButton(interaction, user, gameId) {
   if (maxPlayers && participants.length >= maxPlayers) {
     await interaction.followUp({
       content: '❌ This game is already full.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -153,7 +153,7 @@ async function handleLeaveButton(interaction, user, gameId) {
   if (game.gameState !== 'scheduled') {
     await interaction.followUp({
       content: '❌ This game is no longer scheduled.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -162,7 +162,7 @@ async function handleLeaveButton(interaction, user, gameId) {
   if (!participants.some((p) => p.discordId === user.id)) {
     await interaction.followUp({
       content: '❌ You are not participating in this game.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
