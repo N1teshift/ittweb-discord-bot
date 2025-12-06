@@ -1,5 +1,5 @@
 import { REMINDER_MINUTES_BEFORE, MAX_REMINDER_WINDOW_MS } from '../config.js';
-import { db } from '../firebase.js';
+import { db, isInitialized } from '../firebase.js';
 import { logger } from '../utils/logger.js';
 
 const COLLECTION_NAME = 'discord_bot_reminders';
@@ -12,7 +12,10 @@ export function setClient(client) {
 }
 
 export async function scheduleReminderForGame(userId, game) {
-  if (!db) return;
+  if (!db || !isInitialized) {
+    logger.warn(`Firebase not initialized, cannot schedule reminder for user ${userId}`);
+    return;
+  }
 
   try {
     const rawDate = game.scheduledDateTimeString || game.scheduledDateTime;
@@ -47,7 +50,9 @@ export async function scheduleReminderForGame(userId, game) {
 }
 
 async function checkReminders() {
-  if (!clientInstance || !db) return;
+  if (!clientInstance || !db || !isInitialized) {
+    return;
+  }
 
   try {
     const now = Date.now();
@@ -77,7 +82,10 @@ async function checkReminders() {
     await batch.commit();
 
   } catch (error) {
-    logger.error('Error checking reminders', error);
+    logger.error('Error checking reminders', error, {
+      errorCode: error.code,
+      errorMessage: error.message
+    });
   }
 }
 

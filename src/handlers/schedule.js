@@ -2,7 +2,7 @@ import { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle }
 import { TEAM_SIZE_OPTIONS, GAME_TYPE_OPTIONS, GAME_VERSION_OPTIONS } from '../config.js';
 import { getDateOptions, getTimeOptions } from '../utils/time.js';
 import { createScheduledGame } from '../api.js';
-import { db } from '../firebase.js';
+import { db, isInitialized } from '../firebase.js';
 import { logger } from '../utils/logger.js';
 import { formatGameTime } from '../utils/format.js';
 
@@ -10,33 +10,58 @@ const COLLECTION_NAME = 'discord_bot_states';
 
 // Helper to get state from Firestore
 async function getScheduleState(userId) {
-  if (!db) return {};
+  if (!db || !isInitialized) {
+    logger.warn(`Firebase not initialized, returning empty state for user ${userId}`);
+    return {};
+  }
   try {
     const doc = await db.collection(COLLECTION_NAME).doc(userId).get();
     return doc.exists ? doc.data() : {};
   } catch (error) {
-    logger.error(`Failed to get schedule state for user ${userId}`, error);
+    logger.error(`Failed to get schedule state for user ${userId}`, error, {
+      errorCode: error.code,
+      errorMessage: error.message,
+      userId
+    });
     return {};
   }
 }
 
 // Helper to save state to Firestore
+// Returns true if successful, false otherwise
 async function saveScheduleState(userId, state) {
-  if (!db) return;
+  if (!db || !isInitialized) {
+    logger.warn(`Firebase not initialized, cannot save state for user ${userId}`);
+    return false;
+  }
   try {
     await db.collection(COLLECTION_NAME).doc(userId).set(state, { merge: true });
+    return true;
   } catch (error) {
-    logger.error(`Failed to save schedule state for user ${userId}`, error);
+    logger.error(`Failed to save schedule state for user ${userId}`, error, {
+      errorCode: error.code,
+      errorMessage: error.message,
+      userId,
+      stateKeys: Object.keys(state)
+    });
+    return false;
   }
 }
 
 // Helper to clear state from Firestore
 export async function clearScheduleState(userId) {
-  if (!db) return;
+  if (!db || !isInitialized) {
+    logger.warn(`Firebase not initialized, cannot clear state for user ${userId}`);
+    return;
+  }
   try {
     await db.collection(COLLECTION_NAME).doc(userId).delete();
   } catch (error) {
-    logger.error(`Failed to clear schedule state for user ${userId}`, error);
+    logger.error(`Failed to clear schedule state for user ${userId}`, error, {
+      errorCode: error.code,
+      errorMessage: error.message,
+      userId
+    });
   }
 }
 
@@ -44,56 +69,84 @@ export async function handleScheduleSelectMenu(interaction) {
   const { customId, values, user } = interaction;
   const selectedValue = values[0];
 
-  let state = await getScheduleState(user.id);
+  try {
+    let state = await getScheduleState(user.id);
 
-  if (customId === 'schedule_team_size') {
-    state.teamSize = selectedValue;
-    await saveScheduleState(user.id, state);
-    // Re-read state to ensure we have the complete, latest state
-    state = await getScheduleState(user.id);
-    await updateScheduleStep1(interaction, state);
-    return;
-  }
-
-  if (customId === 'schedule_game_type') {
-    state.gameType = selectedValue;
-    await saveScheduleState(user.id, state);
-    // Re-read state to ensure we have the complete, latest state
-    state = await getScheduleState(user.id);
-    await updateScheduleStep1(interaction, state);
-    return;
-  }
-
-  if (customId === 'schedule_game_version') {
-    state.gameVersion = selectedValue;
-    await saveScheduleState(user.id, state);
-    // Re-read state to ensure we have the complete, latest state
-    state = await getScheduleState(user.id);
-    await updateScheduleStep1(interaction, state);
-    return;
-  }
-
-  if (customId === 'schedule_date') {
-    state.date = selectedValue;
-    await saveScheduleState(user.id, state);
-    // Re-read state to ensure we have the complete, latest state
-    state = await getScheduleState(user.id);
-    await updateScheduleStep2(interaction, state);
-    return;
-  }
-
-  if (customId === 'schedule_time') {
-    state.time = selectedValue;
-    await saveScheduleState(user.id, state);
-    // Re-read state to ensure we have the complete, latest state
-    state = await getScheduleState(user.id);
-
-    if (state.teamSize && state.gameType && state.gameVersion && state.date && state.time) {
-      await finalizeScheduleGame(interaction, state, user);
-    } else {
-      await updateScheduleStep2(interaction, state);
+    if (customId === 'schedule_team_size') {
+      state.teamSize = selectedValue;
+      const saved = await saveScheduleState(user.id, state);
+      if (!saved) {
+        // Still update UI with current selection, but warn user
+        logger.warn(`State not persisted for user ${user.id}, but continuing with selection`);
+      }
+      // Re-read state to ensure we have the complete, latest state
+      state = await getScheduleState(user.id);
+      await updateScheduleStep1(interaction, state);
+      return;
     }
-    return;
+
+    if (customId === 'schedule_game_type') {
+      state.gameType = selectedValue;
+      const saved = await saveScheduleState(user.id, state);
+      if (!saved) {
+        logger.warn(`State not persisted for user ${user.id}, but continuing with selection`);
+      }
+      // Re-read state to ensure we have the complete, latest state
+      state = await getScheduleState(user.id);
+      await updateScheduleStep1(interaction, state);
+      return;
+    }
+
+    if (customId === 'schedule_game_version') {
+      state.gameVersion = selectedValue;
+      const saved = await saveScheduleState(user.id, state);
+      if (!saved) {
+        logger.warn(`State not persisted for user ${user.id}, but continuing with selection`);
+      }
+      // Re-read state to ensure we have the complete, latest state
+      state = await getScheduleState(user.id);
+      await updateScheduleStep1(interaction, state);
+      return;
+    }
+
+    if (customId === 'schedule_date') {
+      state.date = selectedValue;
+      const saved = await saveScheduleState(user.id, state);
+      if (!saved) {
+        logger.warn(`State not persisted for user ${user.id}, but continuing with selection`);
+      }
+      // Re-read state to ensure we have the complete, latest state
+      state = await getScheduleState(user.id);
+      await updateScheduleStep2(interaction, state);
+      return;
+    }
+
+    if (customId === 'schedule_time') {
+      state.time = selectedValue;
+      const saved = await saveScheduleState(user.id, state);
+      if (!saved) {
+        logger.warn(`State not persisted for user ${user.id}, but continuing with selection`);
+      }
+      // Re-read state to ensure we have the complete, latest state
+      state = await getScheduleState(user.id);
+
+      if (state.teamSize && state.gameType && state.gameVersion && state.date && state.time) {
+        await finalizeScheduleGame(interaction, state, user);
+      } else {
+        await updateScheduleStep2(interaction, state);
+      }
+      return;
+    }
+  } catch (error) {
+    logger.error('Error handling schedule select menu', error);
+    try {
+      await interaction.update({
+        content: '❌ An error occurred while saving your selection. Please try again.',
+        components: [],
+      });
+    } catch (updateError) {
+      logger.error('Failed to send error response', updateError);
+    }
   }
 }
 
