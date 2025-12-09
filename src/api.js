@@ -160,3 +160,21 @@ export async function leaveScheduledGame(discordId, gameId) {
   return await response.json();
 }
 
+/**
+ * Get completed games with players from ITT API
+ * @param {number} limit - Maximum number of games to fetch
+ * @returns {Promise<Array>} Array of completed games with players
+ */
+export async function getCompletedGames(limit = 10) {
+  const response = await fetch(
+    `${ITT_API_BASE}/api/games?gameState=completed&limit=${limit}&includePlayers=true`
+  );
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch completed games');
+  }
+
+  const result = await response.json();
+  return result.data?.games || [];
+}
+

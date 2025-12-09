@@ -24,6 +24,11 @@ export const LOBBY_NOTIFICATION_CHANNEL_ID = process.env.LOBBY_NOTIFICATION_CHAN
 export const LOBBY_CHECK_INTERVAL = parseInt(process.env.LOBBY_CHECK_INTERVAL || '60', 10); // Default: 60 seconds
 export const WC3STATS_API_BASE = process.env.WC3STATS_API_BASE || 'https://api.wc3stats.com';
 
+// Completed games monitoring settings
+export const COMPLETED_GAMES_MONITORING_ENABLED = process.env.COMPLETED_GAMES_MONITORING_ENABLED !== 'false'; // Default: true
+export const COMPLETED_GAMES_NOTIFICATION_CHANNEL_ID = process.env.COMPLETED_GAMES_NOTIFICATION_CHANNEL_ID;
+export const COMPLETED_GAMES_CHECK_INTERVAL = parseInt(process.env.COMPLETED_GAMES_CHECK_INTERVAL || '120', 10); // Default: 120 seconds (2 minutes)
+
 // Configuration options for dropdowns
 export const TEAM_SIZE_OPTIONS = [
   { label: '1v1', value: '1v1', description: '2 players total' },

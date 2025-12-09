@@ -67,34 +67,176 @@ export function createGameButtons(gameId, userJoined = false) {
 }
 
 /**
+ * Extract version from map name (e.g., "Island.Troll.Tribes.v3.29c.w3x" -> "v3.29c")
+ * @param {string} mapName - Full map name
+ * @returns {string} Version string or "Unknown"
+ */
+function extractVersion(mapName) {
+  if (!mapName) return 'Unknown';
+  
+  // Match version pattern: v followed by numbers, dots, and letters (e.g., v3.29c, v3.28)
+  const versionMatch = mapName.match(/v\d+\.\d+[a-z]?/i);
+  return versionMatch ? versionMatch[0] : 'Unknown';
+}
+
+/**
+ * Remove battle tag from host name (e.g., "Scatman33#2333" -> "Scatman33")
+ * @param {string} host - Host name with battle tag
+ * @returns {string} Host name without battle tag
+ */
+function removeBattleTag(host) {
+  if (!host) return 'Unknown';
+  // Split by '#' and take the first part
+  return host.split('#')[0];
+}
+
+/**
  * Create a Discord embed for a WC3 lobby notification
  * @param {Object} lobby - Lobby object from wc3stats API
  * @returns {EmbedBuilder} Discord embed
  */
 export function createLobbyEmbed(lobby) {
-  const mapName = lobby.map || 'Unknown Map';
+  const version = extractVersion(lobby.map);
+  const hostName = removeBattleTag(lobby.host);
   const serverName = (lobby.server || 'unknown').toUpperCase();
-  const uptimeMinutes = Math.floor((lobby.uptime || 0) / 60);
-  const uptimeSeconds = (lobby.uptime || 0) % 60;
-  const uptimeText = uptimeMinutes > 0 
-    ? `${uptimeMinutes}m ${uptimeSeconds}s`
-    : `${uptimeSeconds}s`;
+  const slotsTaken = lobby.slotsTaken || 0;
+  const slotsTotal = lobby.slotsTotal || 0;
+  const slotsText = `${slotsTaken}/${slotsTotal}`;
 
   const embed = new EmbedBuilder()
-    .setTitle('🎮 New ITT Lobby Found!')
+    .setTitle(`ITT Lobby (${slotsText})`)
     .setDescription(`**${lobby.name || 'Unnamed Game'}**`)
     .addFields(
-      { name: '🗺️ Map', value: mapName, inline: true },
-      { name: '👤 Host', value: lobby.host || 'Unknown', inline: true },
-      { name: '🌍 Server', value: serverName, inline: true },
-      { name: '👥 Slots', value: `${lobby.slotsTaken || 0}/${lobby.slotsTotal || 0}`, inline: true },
-      { name: '⏱️ Uptime', value: uptimeText, inline: true },
-      { name: '🆔 Lobby ID', value: String(lobby.id || 'N/A'), inline: true }
+      { name: '📦 Version', value: version, inline: true },
+      { name: '👤 Host', value: hostName, inline: true },
+      { name: '🌍 Server', value: serverName, inline: true }
     )
-    .setColor(0x00ff00) // Green color for new lobbies
+    .setColor(0x0099ff)
     .setTimestamp(new Date((lobby.created || Date.now() / 1000) * 1000))
-    .setFooter({ text: 'wc3stats.com' });
+    .setFooter({ text: 'wc3stats.com • Updates automatically' });
 
+  return embed;
+}
+
+/**
+ * Format duration in seconds to readable format (e.g., "15m 30s")
+ * @param {number} seconds - Duration in seconds
+ * @returns {string} Formatted duration
+ */
+function formatDuration(seconds) {
+  if (!seconds) return 'N/A';
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (minutes > 0) {
+    return `${minutes}m ${secs}s`;
+  }
+  return `${secs}s`;
+}
+
+/**
+ * Safely parse a date from various formats (Firestore Timestamp, ISO string, Unix timestamp, etc.)
+ * @param {any} dateValue - Date value in various formats
+ * @returns {Date} Valid Date object or current date as fallback
+ */
+function parseDate(dateValue) {
+  if (!dateValue) {
+    return new Date();
+  }
+  
+  // If it's already a Date object
+  if (dateValue instanceof Date) {
+    return isNaN(dateValue.getTime()) ? new Date() : dateValue;
+  }
+  
+  // If it's a Firestore Timestamp object (has toDate method)
+  if (dateValue && typeof dateValue.toDate === 'function') {
+    try {
+      return dateValue.toDate();
+    } catch (error) {
+      return new Date();
+    }
+  }
+  
+  // If it's a Firestore Timestamp object (has seconds and nanoseconds)
+  if (dateValue && typeof dateValue.seconds === 'number') {
+    try {
+      return new Date(dateValue.seconds * 1000 + (dateValue.nanoseconds || 0) / 1000000);
+    } catch (error) {
+      return new Date();
+    }
+  }
+  
+  // If it's a number (Unix timestamp in seconds or milliseconds)
+  if (typeof dateValue === 'number') {
+    // If it's in seconds (less than year 2000 in milliseconds), convert to milliseconds
+    const timestamp = dateValue < 946684800000 ? dateValue * 1000 : dateValue;
+    const date = new Date(timestamp);
+    return isNaN(date.getTime()) ? new Date() : date;
+  }
+  
+  // If it's a string, try to parse it
+  if (typeof dateValue === 'string') {
+    const date = new Date(dateValue);
+    return isNaN(date.getTime()) ? new Date() : date;
+  }
+  
+  // Fallback to current date
+  return new Date();
+}
+
+/**
+ * Create a comprehensive Discord embed for completed game statistics
+ * @param {Object} game - Completed game object with players
+ * @returns {EmbedBuilder} Discord embed
+ */
+export function createCompletedGameEmbed(game) {
+  const version = extractVersion(game.map || '');
+  const duration = formatDuration(game.duration);
+  const players = game.players || [];
+  
+  // Sort players by pid
+  const sortedPlayers = [...players].sort((a, b) => (a.pid || 0) - (b.pid || 0));
+  
+  // Separate winners and losers (remove battle tags from names)
+  const winners = sortedPlayers.filter(p => p.flag === 'winner');
+  const losers = sortedPlayers.filter(p => p.flag === 'loser');
+  const drawers = sortedPlayers.filter(p => p.flag === 'drawer');
+  
+  // Build embed
+  const gameDate = parseDate(game.datetime || game.createdAt);
+  const embed = new EmbedBuilder()
+    .setTitle(`Game #${game.gameId} - ${game.gamename || 'Unnamed Game'}`)
+    .setColor(0xffd700) // Gold color for completed games
+    .setTimestamp(gameDate)
+    .setFooter({ text: `Created by ${game.creatorName || 'Unknown'}` });
+  
+  // Game info fields
+  embed.addFields(
+    { name: '📦 Version', value: version, inline: true },
+    { name: '⏱️ Duration', value: duration, inline: true }
+  );
+  
+  // Results section (with battle tags removed)
+  if (winners.length > 0) {
+    const winnerNames = winners.map(p => removeBattleTag(p.name)).join(', ');
+    embed.addFields({ name: '🏆 Winners', value: winnerNames, inline: false });
+  }
+  
+  if (losers.length > 0) {
+    const loserNames = losers.map(p => removeBattleTag(p.name)).join(', ');
+    embed.addFields({ name: '💀 Losers', value: loserNames, inline: false });
+  }
+  
+  if (drawers.length > 0) {
+    const drawerNames = drawers.map(p => removeBattleTag(p.name)).join(', ');
+    embed.addFields({ name: '🤝 Draw', value: drawerNames, inline: false });
+  }
+  
+  // Add link to view full details
+  if (game.id) {
+    embed.setURL(`${ITT_API_BASE}/games/${game.id}`);
+  }
+  
   return embed;
 }
 
