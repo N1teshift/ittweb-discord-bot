@@ -65,12 +65,12 @@ export function parseTimeToUTC(timeString) {
   return targetTime.toISOString();
 }
 
-// Generate date options for the next 7 days
+// Generate date options for today and the next 13 days (14 days total)
 export function getDateOptions() {
   const options = [];
   const now = new Date();
 
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 14; i++) {
     const date = new Date(now);
     date.setDate(date.getDate() + i);
 
@@ -124,6 +124,80 @@ export function getTimeOptions() {
       options.push({ label, value, description: `${value} UTC` });
     }
   }
+
+  return options;
+}
+
+// Generate hour options (0-23)
+export function getHourOptions() {
+  const options = [];
+  for (let hour = 0; hour < 24; hour++) {
+    const hourStr = hour.toString().padStart(2, '0');
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    options.push({
+      label: `${displayHour} ${period}`,
+      value: hourStr,
+      description: `${hourStr}:00 UTC`,
+    });
+  }
+  return options;
+}
+
+// Generate minute options (00, 15, 30, 45)
+export function getMinuteOptions() {
+  return [
+    { label: '00', value: '00', description: 'On the hour' },
+    { label: '15', value: '15', description: 'Quarter past' },
+    { label: '30', value: '30', description: 'Half past' },
+    { label: '45', value: '45', description: 'Quarter to' },
+  ];
+}
+
+// Generate reminder time options (hours and minutes before game)
+export function getReminderTimeOptions() {
+  const options = [];
+  
+  // Common reminder times: minutes only (5, 10, 15, 30, 45)
+  const minuteOptions = [5, 10, 15, 30, 45];
+  for (const minutes of minuteOptions) {
+    options.push({
+      label: `${minutes} minute${minutes !== 1 ? 's' : ''} before`,
+      value: String(minutes),
+      description: `${minutes} minutes before game starts`,
+    });
+  }
+  
+  // Hour options: 1, 2, 3, 6, 12, 24 hours
+  const hourOptions = [1, 2, 3, 6, 12, 24];
+  for (const hours of hourOptions) {
+    const totalMinutes = hours * 60;
+    options.push({
+      label: `${hours} hour${hours !== 1 ? 's' : ''} before`,
+      value: String(totalMinutes),
+      description: `${totalMinutes} minutes (${hours} hour${hours !== 1 ? 's' : ''}) before game starts`,
+    });
+  }
+  
+  // Additional combinations for common times
+  const hourMinuteCombos = [
+    { hours: 1, minutes: 30 },
+    { hours: 2, minutes: 30 },
+    { hours: 4, minutes: 0 },
+    { hours: 8, minutes: 0 },
+  ];
+  
+  for (const { hours, minutes } of hourMinuteCombos) {
+    const totalMinutes = hours * 60 + minutes;
+    options.push({
+      label: `${hours}h ${minutes}m before`,
+      value: String(totalMinutes),
+      description: `${totalMinutes} minutes before game starts`,
+    });
+  }
+  
+  // Sort by total minutes (ascending)
+  options.sort((a, b) => parseInt(a.value, 10) - parseInt(b.value, 10));
 
   return options;
 }

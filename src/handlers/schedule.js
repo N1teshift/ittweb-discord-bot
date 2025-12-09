@@ -1,15 +1,16 @@
 import { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { TEAM_SIZE_OPTIONS, GAME_TYPE_OPTIONS, GAME_VERSION_OPTIONS } from '../config.js';
-import { getDateOptions, getTimeOptions } from '../utils/time.js';
-import { createScheduledGame } from '../api.js';
+import { getDateOptions, getHourOptions, getMinuteOptions } from '../utils/time.js';
+import { createScheduledGame, getGameById } from '../api.js';
 import { db, isInitialized } from '../firebase.js';
 import { logger } from '../utils/logger.js';
 import { formatGameTime } from '../utils/format.js';
+import { scheduleReminderForGame } from './reminders.js';
 
 const COLLECTION_NAME = 'discord_bot_states';
 
 // Helper to get state from Firestore
-async function getScheduleState(userId) {
+export async function getScheduleState(userId) {
   if (!db || !isInitialized) {
     logger.warn(`Firebase not initialized, returning empty state for user ${userId}`);
     return {};
@@ -111,6 +112,11 @@ export async function handleScheduleSelectMenu(interaction) {
 
     if (customId === 'schedule_date') {
       state.date = selectedValue;
+      // Ensure defaults are set
+      if (!state.teamSize) state.teamSize = '1v1';
+      if (!state.gameType) state.gameType = 'elo';
+      if (!state.gameVersion) state.gameVersion = 'v3.28';
+      if (!state.minute) state.minute = '00';
       const saved = await saveScheduleState(user.id, state);
       if (!saved) {
         logger.warn(`State not persisted for user ${user.id}, but continuing with selection`);
@@ -121,20 +127,44 @@ export async function handleScheduleSelectMenu(interaction) {
       return;
     }
 
-    if (customId === 'schedule_time') {
-      state.time = selectedValue;
+    if (customId === 'schedule_hour') {
+      state.hour = selectedValue;
+      // Ensure defaults are set
+      if (!state.teamSize) state.teamSize = '1v1';
+      if (!state.gameType) state.gameType = 'elo';
+      if (!state.gameVersion) state.gameVersion = 'v3.28';
+      if (!state.date) {
+        const today = new Date();
+        state.date = today.toISOString().split('T')[0];
+      }
+      if (!state.minute) state.minute = '00';
       const saved = await saveScheduleState(user.id, state);
       if (!saved) {
         logger.warn(`State not persisted for user ${user.id}, but continuing with selection`);
       }
       // Re-read state to ensure we have the complete, latest state
       state = await getScheduleState(user.id);
+      await updateScheduleStep2(interaction, state);
+      return;
+    }
 
-      if (state.teamSize && state.gameType && state.gameVersion && state.date && state.time) {
-        await finalizeScheduleGame(interaction, state, user);
-      } else {
-        await updateScheduleStep2(interaction, state);
+    if (customId === 'schedule_minute') {
+      state.minute = selectedValue;
+      // Ensure defaults are set
+      if (!state.teamSize) state.teamSize = '1v1';
+      if (!state.gameType) state.gameType = 'elo';
+      if (!state.gameVersion) state.gameVersion = 'v3.28';
+      if (!state.date) {
+        const today = new Date();
+        state.date = today.toISOString().split('T')[0];
       }
+      const saved = await saveScheduleState(user.id, state);
+      if (!saved) {
+        logger.warn(`State not persisted for user ${user.id}, but continuing with selection`);
+      }
+      // Re-read state to ensure we have the complete, latest state
+      state = await getScheduleState(user.id);
+      await updateScheduleStep2(interaction, state);
       return;
     }
   } catch (error) {
@@ -151,33 +181,38 @@ export async function handleScheduleSelectMenu(interaction) {
 }
 
 async function updateScheduleStep1(interaction, state) {
+  // Use defaults if not set
+  const teamSize = state.teamSize || '1v1';
+  const gameType = state.gameType || 'elo';
+  const gameVersion = state.gameVersion || 'v3.28';
+
   const teamSizeSelect = new StringSelectMenuBuilder()
     .setCustomId('schedule_team_size')
-    .setPlaceholder(state.teamSize ? `Team Size: ${state.teamSize}` : 'Select team size')
+    .setPlaceholder(`Team Size: ${teamSize}`)
     .addOptions(
       TEAM_SIZE_OPTIONS.map((opt) => ({
         ...opt,
-        default: opt.value === state.teamSize,
+        default: opt.value === teamSize,
       }))
     );
 
   const gameTypeSelect = new StringSelectMenuBuilder()
     .setCustomId('schedule_game_type')
-    .setPlaceholder(state.gameType ? `Game Type: ${state.gameType}` : 'Select game type')
+    .setPlaceholder(`Game Type: ${gameType}`)
     .addOptions(
       GAME_TYPE_OPTIONS.map((opt) => ({
         ...opt,
-        default: opt.value === state.gameType,
+        default: opt.value === gameType,
       }))
     );
 
   const gameVersionSelect = new StringSelectMenuBuilder()
     .setCustomId('schedule_game_version')
-    .setPlaceholder(state.gameVersion ? `Version: ${state.gameVersion}` : 'Select game version')
+    .setPlaceholder(`Version: ${gameVersion}`)
     .addOptions(
       GAME_VERSION_OPTIONS.map((opt) => ({
         ...opt,
-        default: opt.value === state.gameVersion,
+        default: opt.value === gameVersion,
       }))
     );
 
@@ -187,19 +222,18 @@ async function updateScheduleStep1(interaction, state) {
 
   const components = [row1, row2, row3];
 
-  if (state.teamSize && state.gameType && state.gameVersion) {
-    const continueButton = new ButtonBuilder()
-      .setCustomId('schedule_continue')
-      .setLabel('Continue to Date/Time →')
-      .setStyle(ButtonStyle.Primary);
+  // Always show continue button since defaults are set
+  const continueButton = new ButtonBuilder()
+    .setCustomId('schedule_continue')
+    .setLabel('Continue to Date/Time →')
+    .setStyle(ButtonStyle.Primary);
 
-    components.push(new ActionRowBuilder().addComponents(continueButton));
-  }
+  components.push(new ActionRowBuilder().addComponents(continueButton));
 
   const selectedInfo = [];
-  if (state.teamSize) selectedInfo.push(`Team: ${state.teamSize}`);
-  if (state.gameType) selectedInfo.push(`Type: ${state.gameType}`);
-  if (state.gameVersion) selectedInfo.push(`Version: ${state.gameVersion}`);
+  selectedInfo.push(`Team: ${teamSize}`);
+  selectedInfo.push(`Type: ${gameType}`);
+  selectedInfo.push(`Version: ${gameVersion}`);
 
   const statusText = selectedInfo.length > 0 ? `\n\n✅ Selected: ${selectedInfo.join(' • ')}` : '';
 
@@ -210,84 +244,186 @@ async function updateScheduleStep1(interaction, state) {
 }
 
 async function updateScheduleStep2(interaction, state) {
+  // Use defaults if not set
+  const today = new Date();
+  const todayDate = today.toISOString().split('T')[0];
+  const date = state.date || todayDate;
+  const minute = state.minute || '00';
+
   const dateSelect = new StringSelectMenuBuilder()
     .setCustomId('schedule_date')
-    .setPlaceholder(state.date ? `Date: ${state.date}` : 'Select date')
+    .setPlaceholder(`Date: ${date}`)
     .addOptions(
       getDateOptions().map((opt) => ({
         ...opt,
-        default: opt.value === state.date,
+        default: opt.value === date,
       }))
     );
 
-  const timeSelect = new StringSelectMenuBuilder()
-    .setCustomId('schedule_time')
-    .setPlaceholder(state.time ? `Time: ${state.time} UTC` : 'Select time (UTC)')
+  const hourSelect = new StringSelectMenuBuilder()
+    .setCustomId('schedule_hour')
+    .setPlaceholder(state.hour ? `Hour: ${state.hour}` : 'Select hour (UTC)')
     .addOptions(
-      getTimeOptions()
-        .slice(0, 25)
-        .map((opt) => ({
-          ...opt,
-          default: opt.value === state.time,
-        }))
+      getHourOptions().map((opt) => ({
+        ...opt,
+        default: opt.value === state.hour,
+      }))
+    );
+
+  const minuteSelect = new StringSelectMenuBuilder()
+    .setCustomId('schedule_minute')
+    .setPlaceholder(`Minute: ${minute}`)
+    .addOptions(
+      getMinuteOptions().map((opt) => ({
+        ...opt,
+        default: opt.value === minute,
+      }))
     );
 
   const row1 = new ActionRowBuilder().addComponents(dateSelect);
-  const row2 = new ActionRowBuilder().addComponents(timeSelect);
+  const row2 = new ActionRowBuilder().addComponents(hourSelect);
+  const row3 = new ActionRowBuilder().addComponents(minuteSelect);
+
+  const components = [row1, row2, row3];
+
+  // Show submit button if all fields are selected
+  if (state.date && state.hour && state.minute) {
+    const submitButton = new ButtonBuilder()
+      .setCustomId('schedule_submit')
+      .setLabel('✅ Schedule Game')
+      .setStyle(ButtonStyle.Success);
+
+    components.push(new ActionRowBuilder().addComponents(submitButton));
+  }
 
   const selectedInfo = [];
-  if (state.date) selectedInfo.push(`Date: ${state.date}`);
-  if (state.time) selectedInfo.push(`Time: ${state.time} UTC`);
+  selectedInfo.push(`Date: ${date}`);
+  if (state.hour !== undefined) {
+    const period = parseInt(state.hour, 10) >= 12 ? 'PM' : 'AM';
+    const displayHour = parseInt(state.hour, 10) === 0 ? 12 : parseInt(state.hour, 10) > 12 ? parseInt(state.hour, 10) - 12 : parseInt(state.hour, 10);
+    selectedInfo.push(`Time: ${displayHour}:${minute} ${period} UTC`);
+  } else {
+    selectedInfo.push(`Minute: ${minute}`);
+  }
 
   const statusText = selectedInfo.length > 0 ? `\n\n✅ Selected: ${selectedInfo.join(' • ')}` : '';
 
+  // Use defaults if not set
+  const teamSize = state.teamSize || '1v1';
+  const gameType = state.gameType || 'elo';
+  const gameVersion = state.gameVersion || 'v3.28';
+
   await interaction.update({
-    content: `📅 **Schedule a New Game - Step 2/2**\n**Settings:** ${state.teamSize} ${state.gameType} (${state.gameVersion})\n\nSelect date and time:${statusText}`,
-    components: [row1, row2],
+    content: `📅 **Schedule a New Game - Step 2/2**\n**Settings:** ${teamSize} ${gameType} (${gameVersion})\n\nSelect date and time:${statusText}`,
+    components,
   });
 }
 
-async function finalizeScheduleGame(interaction, state, user) {
+export async function finalizeScheduleGame(interaction, state, user) {
   try {
-    const scheduledDateTime = `${state.date}T${state.time}:00.000Z`;
+    // Use defaults if not set
+    const today = new Date();
+    const todayDate = today.toISOString().split('T')[0];
+    const date = state.date || todayDate;
+    const minute = state.minute || '00';
+    
+    if (!state.hour) {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({
+          content: '❌ Please select an hour.',
+          components: [],
+        });
+      } else {
+        await interaction.update({
+          content: '❌ Please select an hour.',
+          components: [],
+        });
+      }
+      return;
+    }
+    
+    const timeString = `${state.hour}:${minute}`;
+    const scheduledDateTime = `${date}T${timeString}:00.000Z`;
 
     const scheduleDate = new Date(scheduledDateTime);
     if (scheduleDate <= new Date()) {
-      await interaction.update({
-        content: '❌ The selected time has already passed. Please select a future time.',
-        components: [],
-      });
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({
+          content: '❌ The selected time has already passed. Please select a future time.',
+          components: [],
+        });
+      } else {
+        await interaction.update({
+          content: '❌ The selected time has already passed. Please select a future time.',
+          components: [],
+        });
+      }
       return;
     }
+
+    // Use defaults if not set
+    const teamSize = state.teamSize || '1v1';
+    const gameType = state.gameType || 'elo';
+    const gameVersion = state.gameVersion || 'v3.28';
 
     const gameId = await createScheduledGame(
       user.id,
       user.displayName || user.username,
       scheduledDateTime,
-      state.teamSize,
-      state.gameType,
-      state.gameVersion,
+      teamSize,
+      gameType,
+      gameVersion,
       1800,
       []
     );
+
+    // Schedule reminder for the game creator (who is automatically added as participant)
+    try {
+      const createdGame = await getGameById(gameId);
+      if (createdGame) {
+        await scheduleReminderForGame(user.id, createdGame);
+      }
+    } catch (reminderError) {
+      // Log but don't fail the game creation if reminder scheduling fails
+      logger.error('Failed to schedule reminder for game creator', reminderError);
+    }
 
     await clearScheduleState(user.id);
 
     const gameTime = formatGameTime(scheduleDate);
 
-    await interaction.update({
-      content: `✅ **Game Scheduled Successfully!**\n\n🎮 **Game #${gameId}**\n📋 ${state.teamSize} ${state.gameType} (${state.gameVersion})\n⏰ ${gameTime} UTC`,
-      components: [],
-    });
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply({
+        content: `✅ **Game Scheduled Successfully!**\n\n🎮 **Game #${gameId}**\n📋 ${teamSize} ${gameType} (${gameVersion})\n⏰ ${gameTime} UTC`,
+        components: [],
+      });
+    } else {
+      await interaction.update({
+        content: `✅ **Game Scheduled Successfully!**\n\n🎮 **Game #${gameId}**\n📋 ${teamSize} ${gameType} (${gameVersion})\n⏰ ${gameTime} UTC`,
+        components: [],
+      });
+    }
 
-    logger.info(`Game scheduled by ${user.username}`, { gameId, userId: user.id });
+    logger.info(`Game scheduled by ${user.username} for ${gameTime} UTC`, { 
+      gameId, 
+      userId: user.id,
+      scheduledDateTime: scheduledDateTime,
+      gameTime: gameTime
+    });
 
   } catch (error) {
     logger.error('Failed to schedule game', error);
-    await interaction.update({
-      content: `❌ Failed to schedule game: ${error.message}`,
-      components: [],
-    });
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply({
+        content: `❌ Failed to schedule game: ${error.message}`,
+        components: [],
+      });
+    } else {
+      await interaction.update({
+        content: `❌ Failed to schedule game: ${error.message}`,
+        components: [],
+      });
+    }
   }
 }
 
