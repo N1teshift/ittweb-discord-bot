@@ -18,6 +18,12 @@ export const REMINDERS_ENABLED = true;
 export const REMINDER_MINUTES_BEFORE = 10;
 export const MAX_REMINDER_WINDOW_MS = 6 * 60 * 60 * 1000; // 6 hours
 
+// Lobby monitoring settings
+export const LOBBY_MONITORING_ENABLED = process.env.LOBBY_MONITORING_ENABLED !== 'false'; // Default: true
+export const LOBBY_NOTIFICATION_CHANNEL_ID = process.env.LOBBY_NOTIFICATION_CHANNEL_ID;
+export const LOBBY_CHECK_INTERVAL = parseInt(process.env.LOBBY_CHECK_INTERVAL || '60', 10); // Default: 60 seconds
+export const WC3STATS_API_BASE = process.env.WC3STATS_API_BASE || 'https://api.wc3stats.com';
+
 // Configuration options for dropdowns
 export const TEAM_SIZE_OPTIONS = [
   { label: '1v1', value: '1v1', description: '2 players total' },

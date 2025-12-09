@@ -66,3 +66,35 @@ export function createGameButtons(gameId, userJoined = false) {
   return row;
 }
 
+/**
+ * Create a Discord embed for a WC3 lobby notification
+ * @param {Object} lobby - Lobby object from wc3stats API
+ * @returns {EmbedBuilder} Discord embed
+ */
+export function createLobbyEmbed(lobby) {
+  const mapName = lobby.map || 'Unknown Map';
+  const serverName = (lobby.server || 'unknown').toUpperCase();
+  const uptimeMinutes = Math.floor((lobby.uptime || 0) / 60);
+  const uptimeSeconds = (lobby.uptime || 0) % 60;
+  const uptimeText = uptimeMinutes > 0 
+    ? `${uptimeMinutes}m ${uptimeSeconds}s`
+    : `${uptimeSeconds}s`;
+
+  const embed = new EmbedBuilder()
+    .setTitle('🎮 New ITT Lobby Found!')
+    .setDescription(`**${lobby.name || 'Unnamed Game'}**`)
+    .addFields(
+      { name: '🗺️ Map', value: mapName, inline: true },
+      { name: '👤 Host', value: lobby.host || 'Unknown', inline: true },
+      { name: '🌍 Server', value: serverName, inline: true },
+      { name: '👥 Slots', value: `${lobby.slotsTaken || 0}/${lobby.slotsTotal || 0}`, inline: true },
+      { name: '⏱️ Uptime', value: uptimeText, inline: true },
+      { name: '🆔 Lobby ID', value: String(lobby.id || 'N/A'), inline: true }
+    )
+    .setColor(0x00ff00) // Green color for new lobbies
+    .setTimestamp(new Date((lobby.created || Date.now() / 1000) * 1000))
+    .setFooter({ text: 'wc3stats.com' });
+
+  return embed;
+}
+

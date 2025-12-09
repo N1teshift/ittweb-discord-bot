@@ -30,6 +30,7 @@ import { handleSlashCommand } from './handlers/commands.js';
 import { handleButton } from './handlers/buttons.js';
 import { handleSelectMenu } from './handlers/selectMenus.js';
 import { setClient } from './handlers/reminders.js';
+import { initializeLobbyMonitor } from './handlers/lobbyMonitor.js';
 
 // Initialize Discord client
 const client = new Client({
@@ -71,6 +72,7 @@ async function registerCommands() {
 const onReady = () => {
   console.log(`Logged in as ${client.user.tag}!`);
   setClient(client);
+  initializeLobbyMonitor(client);
   registerCommands();
 };
 
