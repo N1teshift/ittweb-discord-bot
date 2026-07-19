@@ -10,6 +10,7 @@ import {
   extractMapVersion,
   getGameShareUrl,
 } from '../components/embeds.js';
+import { suppressCompletedGameNotification } from './completedGamesMonitor.js';
 
 const COLLECTION_NAME = 'discord_bot_lobby_notifications';
 const ACTIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — covers STARTED awaiting upload
@@ -470,6 +471,12 @@ async function checkStartedLobbiesForEnded(channel, activeNotifications) {
       }
 
       notification.state = 'ENDED';
+
+      // Prevent the completed-games monitor from posting the old stats embed
+      const completedGameId = game.gameId || game.id;
+      if (completedGameId) {
+        await suppressCompletedGameNotification(completedGameId, game);
+      }
 
       logger.info(`Marked lobby as ENDED (share card): ${notification.map || 'unknown'} (ID: ${lobbyId})`, {
         lobbyId,

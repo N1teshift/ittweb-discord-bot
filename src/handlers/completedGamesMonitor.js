@@ -120,8 +120,19 @@ async function checkCompletedGames() {
 
     for (const game of sortedNewGames) {
       try {
-        // Log game data structure for debugging if there's an issue
         const gameId = game.gameId || game.id;
+
+        // Lobby STARTED→ENDED already posts the share card for these — skip the old embed
+        if (isDiscordLobbyBridgedGame(game)) {
+          await markGameAsNotified(gameId, game);
+          logger.info(`Skipped completed-game embed (lobby share card handles it): #${gameId}`, {
+            gameId,
+            createdByDiscordId: game.createdByDiscordId,
+            discordMessageId: game.discordMessageId || null,
+          });
+          continue;
+        }
+
         logger.debug(`Processing game ${gameId}`, {
           gameId,
           hasDatetime: !!game.datetime,
@@ -163,6 +174,27 @@ async function checkCompletedGames() {
       errorMessage: error.message,
     });
   }
+}
+
+/**
+ * Games created from Discord lobby STARTED posts — handled by lobby share-card ENDED flow
+ * @param {Object} game
+ * @returns {boolean}
+ */
+function isDiscordLobbyBridgedGame(game) {
+  if (!game) return false;
+  if (game.createdByDiscordId === 'discord-lobby') return true;
+  if (game.discordMessageId || game.wc3statsLobbyId) return true;
+  return false;
+}
+
+/**
+ * Mark a game as notified (exported so lobby ENDED can suppress the old embed)
+ * @param {string|number} gameId
+ * @param {Object} game
+ */
+export async function suppressCompletedGameNotification(gameId, game = {}) {
+  await markGameAsNotified(gameId, game);
 }
 
 /**
