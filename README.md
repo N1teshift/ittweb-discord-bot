@@ -11,7 +11,7 @@
 If you own or administer a Discord server and want this bot there:
 
 1. Open the invite link below and authorize.
-2. Give the bot operator the channel ID where lobby/completed-game posts should appear.
+2. Give the bot operator the channel ID where lobby/completed-game posts should appear (the ITT server uses `676097235791904820`).
 
 You need **Manage Server** (or Administrator) permission on the target server to add a bot.
 
