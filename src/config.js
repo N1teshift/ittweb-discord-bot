@@ -1,7 +1,8 @@
 // Configuration from environment variables
 export const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 export const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
-export const ITT_API_BASE = process.env.ITT_API_BASE || 'https://your-vercel-app.vercel.app';
+export const ITT_API_BASE =
+  process.env.ITT_API_BASE || 'https://websites-ittweb.vercel.app';
 export const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
 export const BOT_API_KEY = process.env.BOT_API_KEY;
 

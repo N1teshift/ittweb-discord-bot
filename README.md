@@ -17,7 +17,7 @@ Discord bot for the [ITT Web](https://github.com/N1teshift/ittweb) tournament sy
 ```env
 DISCORD_TOKEN=your_bot_token
 DISCORD_CLIENT_ID=your_app_id
-ITT_API_BASE=https://your-vercel-app.vercel.app
+ITT_API_BASE=https://websites-ittweb.vercel.app
 BOT_API_KEY=your_api_key
 FIREBASE_SERVICE_ACCOUNT_KEY=your_firebase_json
 FIREBASE_PROJECT_ID=your_project_id
