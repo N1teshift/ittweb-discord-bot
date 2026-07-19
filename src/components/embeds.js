@@ -166,18 +166,84 @@ export function createLobbyComponents(state, ittGameDocumentId) {
     ];
   }
 
-  if (normalizedState === LOBBY_STATE.ENDED) {
-    return [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setLabel('View game')
-          .setStyle(ButtonStyle.Link)
-          .setURL(baseUrl)
-      ),
-    ];
+  // ENDED uses the share-card embed (no button) — see createEndedLobbyShareEmbed
+  return [];
+}
+
+/**
+ * Build the public share URL used by ittweb Discord previews
+ * @param {string} gameDocumentId
+ * @returns {string}
+ */
+export function getGameShareUrl(gameDocumentId) {
+  return `${ITT_API_BASE}/en/games/${gameDocumentId}?share=1`;
+}
+
+/**
+ * Open Graph image URL for Discord share cards
+ * @param {string} gameDocumentId
+ * @returns {string}
+ */
+export function getGameShareImageUrl(gameDocumentId) {
+  return `${ITT_API_BASE}/en/games/${gameDocumentId}/opengraph-image?share=1`;
+}
+
+/**
+ * ENDED lobby message: mirror ittweb's Discord share-link card
+ * (title + description + OG route preview image)
+ * @param {Object} game - Completed game from ITT API
+ * @returns {EmbedBuilder}
+ */
+export function createEndedLobbyShareEmbed(game) {
+  const gameDocumentId = game.id;
+  const gameLabel = game.gameId != null ? `Game #${game.gameId}` : 'Game';
+  const gameName = truncateShareText(game.gamename, 80);
+  const title = gameName ? `${gameName} | ${gameLabel}` : gameLabel;
+
+  const version = extractVersion(game.map || '');
+  const details = [
+    game.duration ? formatDuration(game.duration) : null,
+    game.category || null,
+    game.playerCount ? `${game.playerCount} players` : null,
+    version !== 'Unknown' ? version : null,
+  ].filter(Boolean);
+
+  const playerNames = (game.playerNames || game.players?.map((p) => p.name) || [])
+    .slice(0, 4)
+    .map((name) => truncateShareText(removeBattleTag(name), 32))
+    .filter(Boolean)
+    .join(', ');
+  const totalPlayers = game.playerNames?.length || game.players?.length || 0;
+  const morePlayers = Math.max(0, totalPlayers - 4);
+  const playerSummary = playerNames
+    ? ` Players: ${playerNames}${morePlayers > 0 ? ` and ${morePlayers} more` : ''}.`
+    : '';
+
+  const description = `Completed Island Troll Tribes game${
+    details.length > 0 ? `: ${details.join(' | ')}.` : '.'
+  }${playerSummary}`;
+
+  const embed = new EmbedBuilder()
+    .setTitle(title)
+    .setDescription(description)
+    .setColor(0xffd700)
+    .setTimestamp(parseDate(game.datetime || game.createdAt));
+
+  if (gameDocumentId) {
+    const shareUrl = getGameShareUrl(gameDocumentId);
+    embed.setURL(shareUrl);
+    embed.setImage(getGameShareImageUrl(gameDocumentId));
   }
 
-  return [];
+  return embed;
+}
+
+function truncateShareText(value, maxLength) {
+  if (!value) return '';
+  const normalized = String(value).replace(/\s+/g, ' ').trim();
+  return normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength - 1)}...`
+    : normalized;
 }
 
 /**

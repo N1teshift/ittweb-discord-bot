@@ -3,7 +3,13 @@ import { db, isInitialized } from '../firebase.js';
 import { logger } from '../utils/logger.js';
 import { fetchActiveLobbies, filterITTGames } from '../services/wc3stats.js';
 import { createDiscordLobbyGame, getGameById } from '../api.js';
-import { createLobbyEmbed, createLobbyComponents, extractMapVersion } from '../components/embeds.js';
+import {
+  createLobbyEmbed,
+  createLobbyComponents,
+  createEndedLobbyShareEmbed,
+  extractMapVersion,
+  getGameShareUrl,
+} from '../components/embeds.js';
 
 const COLLECTION_NAME = 'discord_bot_lobby_notifications';
 const ACTIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — covers STARTED awaiting upload
@@ -445,11 +451,15 @@ async function checkStartedLobbiesForEnded(channel, activeNotifications) {
         continue;
       }
 
-      const lobby = lobbyFromNotification(notification);
-      const embed = createLobbyEmbed(lobby, 'ENDED');
-      const components = createLobbyComponents('ENDED', notification.ittGameDocumentId);
+      // Replace lobby card with ittweb share-link style (OG image + share URL)
+      const shareUrl = getGameShareUrl(notification.ittGameDocumentId);
+      const embed = createEndedLobbyShareEmbed(game);
       const message = await channel.messages.fetch(notification.messageId);
-      await message.edit({ embeds: [embed], components });
+      await message.edit({
+        content: shareUrl,
+        embeds: [embed],
+        components: [],
+      });
 
       if (db && isInitialized) {
         await db.collection(COLLECTION_NAME).doc(String(lobbyId)).update({
@@ -461,10 +471,11 @@ async function checkStartedLobbiesForEnded(channel, activeNotifications) {
 
       notification.state = 'ENDED';
 
-      logger.info(`Marked lobby as ENDED: ${notification.map || 'unknown'} (ID: ${lobbyId})`, {
+      logger.info(`Marked lobby as ENDED (share card): ${notification.map || 'unknown'} (ID: ${lobbyId})`, {
         lobbyId,
         messageId: notification.messageId,
         ittGameDocumentId: notification.ittGameDocumentId,
+        shareUrl,
         state: 'ENDED',
       });
     } catch (error) {
