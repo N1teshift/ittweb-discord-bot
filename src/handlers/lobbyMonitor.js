@@ -60,18 +60,6 @@ async function checkLobbies() {
     
     // Filter for ITT games
     const ittLobbies = filterITTGames(allLobbies);
-    
-    if (ittLobbies.length === 0) {
-      // Log periodically to confirm the check loop is running
-      const now = Date.now();
-      if (now - lastCheckLogTime >= CHECK_LOG_INTERVAL_MS) {
-        logger.info('Lobby check completed - no ITT lobbies found');
-        lastCheckLogTime = now;
-      }
-      return;
-    }
-
-    logger.info(`Found ${ittLobbies.length} ITT lobby/lobbies`);
 
     // Get channel
     const channel = await clientInstance.channels.fetch(LOBBY_NOTIFICATION_CHANNEL_ID);
@@ -84,14 +72,30 @@ async function checkLobbies() {
     const activeNotifications = await getActiveLobbyNotifications();
     const notificationMap = new Map();
     activeNotifications.forEach(notif => {
-      notificationMap.set(notif.lobbyId, notif);
+      // Normalize IDs so number/string mismatches don't miss updates
+      notificationMap.set(Number(notif.lobbyId), notif);
     });
+
+    if (ittLobbies.length === 0) {
+      // Still flip OPEN posts to STARTED when the gamelist is empty
+      await markMissingLobbiesAsStarted(channel, activeNotifications, []);
+
+      // Log periodically to confirm the check loop is running
+      const now = Date.now();
+      if (now - lastCheckLogTime >= CHECK_LOG_INTERVAL_MS) {
+        logger.info('Lobby check completed - no ITT lobbies found');
+        lastCheckLogTime = now;
+      }
+      return;
+    }
+
+    logger.info(`Found ${ittLobbies.length} ITT lobby/lobbies`);
 
     // Process each ITT lobby
     for (const lobby of ittLobbies) {
       try {
         const embed = createLobbyEmbed(lobby, 'OPEN');
-        const notification = notificationMap.get(lobby.id);
+        const notification = notificationMap.get(Number(lobby.id));
 
         if (notification && notification.messageId) {
           // Update existing message (including re-opening a previously STARTED lobby)
@@ -297,10 +301,11 @@ function lobbyFromNotification(notification) {
  * @param {Array<number>} activeLobbyIds - Currently open lobby IDs
  */
 async function markMissingLobbiesAsStarted(channel, activeNotifications, activeLobbyIds) {
-  const activeSet = new Set(activeLobbyIds);
+  const activeSet = new Set(activeLobbyIds.map(id => Number(id)));
 
   for (const notification of activeNotifications) {
-    if (!notification.lobbyId || activeSet.has(notification.lobbyId)) {
+    const lobbyId = Number(notification.lobbyId);
+    if (!lobbyId || activeSet.has(lobbyId)) {
       continue;
     }
 
@@ -320,15 +325,15 @@ async function markMissingLobbiesAsStarted(channel, activeNotifications, activeL
       await message.edit({ embeds: [embed] });
 
       if (db && isInitialized) {
-        await db.collection(COLLECTION_NAME).doc(String(notification.lobbyId)).update({
+        await db.collection(COLLECTION_NAME).doc(String(lobbyId)).update({
           state: 'STARTED',
           startedAt: Date.now(),
           lastUpdatedAt: Date.now(),
         });
       }
 
-      logger.info(`Marked lobby as STARTED: ${notification.map || 'unknown'} (ID: ${notification.lobbyId})`, {
-        lobbyId: notification.lobbyId,
+      logger.info(`Marked lobby as STARTED: ${notification.map || 'unknown'} (ID: ${lobbyId})`, {
+        lobbyId,
         messageId: notification.messageId,
         state: 'STARTED',
       });
@@ -336,15 +341,15 @@ async function markMissingLobbiesAsStarted(channel, activeNotifications, activeL
       // Message deleted — drop the Firebase record so we don't keep retrying
       if (error.code === 10008 && db && isInitialized) {
         try {
-          await db.collection(COLLECTION_NAME).doc(String(notification.lobbyId)).delete();
+          await db.collection(COLLECTION_NAME).doc(String(lobbyId)).delete();
         } catch (deleteError) {
-          logger.error(`Failed to delete missing lobby notification ${notification.lobbyId}`, deleteError);
+          logger.error(`Failed to delete missing lobby notification ${lobbyId}`, deleteError);
         }
         continue;
       }
 
-      logger.error(`Failed to mark lobby ${notification.lobbyId} as STARTED`, error, {
-        lobbyId: notification.lobbyId,
+      logger.error(`Failed to mark lobby ${lobbyId} as STARTED`, error, {
+        lobbyId,
         messageId: notification.messageId,
         errorMessage: error.message,
       });
