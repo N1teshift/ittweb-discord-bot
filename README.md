@@ -23,10 +23,17 @@ https://discord.com/oauth2/authorize?client_id=1403760064774541445&permissions=2
 
 ## Screenshots
 
+Bot message after the lobby has been created:
+
 ![Open lobby](assets/bot_open.png)
+
+Bot message after the game has been started:
+
 ![Game started](assets/bot_started.png)
+
+Bot message after the game replay has been uploaded:
+
 ![Game started (large)](assets/bot_started_large.png)
-![Game ended](assets/bot_ended.png)
 
 ## Setup (bot operators)
 
