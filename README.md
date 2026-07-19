@@ -10,32 +10,16 @@
 
 If you own or administer a Discord server and want this bot there:
 
-1. Use the ready-made invite link below, or open the [Discord Developer Portal](https://discord.com/developers/applications) to generate your own.
-2. Go to **OAuth2 → URL Generator**.
-3. Under **Scopes**, enable:
-   - `bot`
-   - `applications.commands`
-4. Under **Bot Permissions**, enable at least:
-   - View Channels
-   - Send Messages
-   - Embed Links
-   - Attach Files
-   - Read Message History
-   - Use Application Commands
-5. Copy the generated URL at the bottom, open it in your browser, choose your server, and authorize.
-6. In Discord, create or pick the channel where lobby and completed-game posts should appear.
-7. Right-click the channel → **Copy Channel ID** (enable **Developer Mode** under Discord Settings → Advanced if you don’t see that option).
-8. Give that channel ID to whoever runs the bot so they can set `NOTIFICATION_CHANNEL_ID`.
+1. Open the invite link below and authorize.
+2. Give the bot operator the channel ID where lobby/completed-game posts should appear.
 
 You need **Manage Server** (or Administrator) permission on the target server to add a bot.
 
-### Ready-made invite link
+### Invite link
 
 ```text
 https://discord.com/oauth2/authorize?client_id=1403760064774541445&permissions=277025770560&scope=bot%20applications.commands
 ```
-
-That `permissions` value covers the permissions listed above.
 
 ## Setup (bot operators)
 
