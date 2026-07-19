@@ -1,7 +1,5 @@
 # ITT Web Discord Bot
 
-Bot for the [ITT Web](https://github.com/N1teshift/ittweb) community Discord.
-
 ## Features
 
 - Schedule and manage games via `/games` command in Discord
