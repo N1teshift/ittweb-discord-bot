@@ -2,9 +2,14 @@ import { LOBBY_NOTIFICATION_CHANNEL_ID, LOBBY_CHECK_INTERVAL, LOBBY_MONITORING_E
 import { db, isInitialized } from '../firebase.js';
 import { logger } from '../utils/logger.js';
 import { fetchActiveLobbies, filterITTGames } from '../services/wc3stats.js';
-import { createLobbyEmbed } from '../components/embeds.js';
+import { createDiscordLobbyGame, getGameById } from '../api.js';
+import { createLobbyEmbed, createLobbyComponents, extractMapVersion } from '../components/embeds.js';
 
 const COLLECTION_NAME = 'discord_bot_lobby_notifications';
+const ACTIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — covers STARTED awaiting upload
+const OPEN_RETENTION_MS = 24 * 60 * 60 * 1000;
+const STARTED_ENDED_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
 let clientInstance = null;
 let lastCheckLogTime = 0;
 const CHECK_LOG_INTERVAL_MS = 5 * 60 * 1000; // Log every 5 minutes
@@ -79,6 +84,7 @@ async function checkLobbies() {
     if (ittLobbies.length === 0) {
       // Still flip OPEN posts to STARTED when the gamelist is empty
       await markMissingLobbiesAsStarted(channel, activeNotifications, []);
+      await checkStartedLobbiesForEnded(channel, activeNotifications);
 
       // Log periodically to confirm the check loop is running
       const now = Date.now();
@@ -94,14 +100,20 @@ async function checkLobbies() {
     // Process each ITT lobby
     for (const lobby of ittLobbies) {
       try {
-        const embed = createLobbyEmbed(lobby, 'OPEN');
         const notification = notificationMap.get(Number(lobby.id));
+
+        // Never overwrite a finished ENDED post
+        if (notification?.state === 'ENDED') {
+          continue;
+        }
+
+        const embed = createLobbyEmbed(lobby, 'OPEN');
 
         if (notification && notification.messageId) {
           // Update existing message (including re-opening a previously STARTED lobby)
           try {
             const message = await channel.messages.fetch(notification.messageId);
-            await message.edit({ embeds: [embed] });
+            await message.edit({ embeds: [embed], components: [] });
             
             // Update Firebase record with latest data
             await updateLobbyNotification(lobby.id, lobby, notification.messageId, 'OPEN');
@@ -134,6 +146,8 @@ async function checkLobbies() {
 
     // Mark lobbies that left the gamelist as STARTED
     await markMissingLobbiesAsStarted(channel, activeNotifications, ittLobbies.map(l => l.id));
+    // Poll linked ittweb games for completed uploads → ENDED
+    await checkStartedLobbiesForEnded(channel, activeNotifications);
 
   } catch (error) {
     logger.error('Error checking lobbies', error, {
@@ -150,7 +164,7 @@ async function checkLobbies() {
  */
 async function createNewLobbyNotification(channel, lobby) {
   const embed = createLobbyEmbed(lobby, 'OPEN');
-  const message = await channel.send({ embeds: [embed] });
+  const message = await channel.send({ embeds: [embed], components: [] });
   
   // Store in Firebase with message ID
   await markLobbyAsNotified(lobby.id, lobby, message.id);
@@ -175,10 +189,9 @@ async function getActiveLobbyNotifications() {
   }
 
   try {
-    // Get all notified lobbies from the last 2 hours (lobbies can last a while)
-    const twoHoursAgo = Date.now() - (2 * 60 * 60 * 1000);
+    const windowStart = Date.now() - ACTIVE_WINDOW_MS;
     const snapshot = await db.collection(COLLECTION_NAME)
-      .where('notifiedAt', '>=', twoHoursAgo)
+      .where('notifiedAt', '>=', windowStart)
       .get();
 
     const notifications = [];
@@ -247,7 +260,7 @@ async function markLobbyAsNotified(lobbyId, lobby, messageId) {
  * @param {number} lobbyId - Lobby ID
  * @param {Object} lobby - Full lobby object with updated data
  * @param {string} messageId - Discord message ID
- * @param {'OPEN'|'STARTED'} [state='OPEN'] - Lobby lifecycle state
+ * @param {'OPEN'|'STARTED'|'ENDED'} [state='OPEN'] - Lobby lifecycle state
  */
 async function updateLobbyNotification(lobbyId, lobby, messageId, state = 'OPEN') {
   if (!db || !isInitialized) {
@@ -295,6 +308,42 @@ function lobbyFromNotification(notification) {
 }
 
 /**
+ * Create (or retry) the linked awaiting_replay game on ittweb
+ * @param {Object} notification
+ * @param {Object} lobby
+ * @returns {Promise<{ id: string, gameId: number }|null>}
+ */
+async function ensureDiscordLobbyGame(notification, lobby) {
+  if (notification.ittGameDocumentId) {
+    return {
+      id: notification.ittGameDocumentId,
+      gameId: notification.ittGameId,
+    };
+  }
+
+  try {
+    const created = await createDiscordLobbyGame({
+      discordChannelId: LOBBY_NOTIFICATION_CHANNEL_ID,
+      discordMessageId: notification.messageId,
+      wc3statsLobbyId: Number(notification.lobbyId),
+      host: lobby.host || notification.host,
+      map: lobby.map || notification.map,
+      server: lobby.server || notification.server,
+      gameVersion: extractMapVersion(lobby.map || notification.map),
+      gameName: lobby.name || notification.name,
+    });
+    return created;
+  } catch (error) {
+    logger.error(`Failed to create ittweb game for lobby ${notification.lobbyId}`, error, {
+      lobbyId: notification.lobbyId,
+      messageId: notification.messageId,
+      errorMessage: error.message,
+    });
+    return null;
+  }
+}
+
+/**
  * When a lobby disappears from the gamelist, mark its Discord post as STARTED
  * @param {Channel} channel - Discord notification channel
  * @param {Array} activeNotifications - Recent notification records
@@ -309,8 +358,12 @@ async function markMissingLobbiesAsStarted(channel, activeNotifications, activeL
       continue;
     }
 
-    // Already marked STARTED — leave the post alone
-    if (notification.state === 'STARTED') {
+    if (notification.state === 'ENDED') {
+      continue;
+    }
+
+    // Already STARTED with a linked game — leave for ENDED poll
+    if (notification.state === 'STARTED' && notification.ittGameDocumentId) {
       continue;
     }
 
@@ -320,22 +373,38 @@ async function markMissingLobbiesAsStarted(channel, activeNotifications, activeL
 
     try {
       const lobby = lobbyFromNotification(notification);
+      const linkedGame = await ensureDiscordLobbyGame(notification, lobby);
+      const ittGameDocumentId = linkedGame?.id || null;
+      const components = createLobbyComponents('STARTED', ittGameDocumentId);
       const embed = createLobbyEmbed(lobby, 'STARTED');
       const message = await channel.messages.fetch(notification.messageId);
-      await message.edit({ embeds: [embed] });
+      await message.edit({ embeds: [embed], components });
 
       if (db && isInitialized) {
-        await db.collection(COLLECTION_NAME).doc(String(lobbyId)).update({
+        const update = {
           state: 'STARTED',
-          startedAt: Date.now(),
+          startedAt: notification.startedAt || Date.now(),
           lastUpdatedAt: Date.now(),
-        });
+        };
+        if (linkedGame) {
+          update.ittGameDocumentId = linkedGame.id;
+          update.ittGameId = linkedGame.gameId ?? null;
+        }
+        await db.collection(COLLECTION_NAME).doc(String(lobbyId)).update(update);
+      }
+
+      // Keep in-memory notification in sync for the ENDED poll in the same cycle
+      notification.state = 'STARTED';
+      if (linkedGame) {
+        notification.ittGameDocumentId = linkedGame.id;
+        notification.ittGameId = linkedGame.gameId;
       }
 
       logger.info(`Marked lobby as STARTED: ${notification.map || 'unknown'} (ID: ${lobbyId})`, {
         lobbyId,
         messageId: notification.messageId,
         state: 'STARTED',
+        ittGameDocumentId,
       });
     } catch (error) {
       // Message deleted — drop the Firebase record so we don't keep retrying
@@ -358,8 +427,68 @@ async function markMissingLobbiesAsStarted(channel, activeNotifications, activeL
 }
 
 /**
- * Clean up old notification records (optional maintenance function)
- * Can be called periodically to remove old entries
+ * Poll STARTED lobbies with linked ittweb games; flip to ENDED when completed
+ * @param {Channel} channel
+ * @param {Array} activeNotifications
+ */
+async function checkStartedLobbiesForEnded(channel, activeNotifications) {
+  for (const notification of activeNotifications) {
+    if (notification.state !== 'STARTED' || !notification.ittGameDocumentId || !notification.messageId) {
+      continue;
+    }
+
+    const lobbyId = Number(notification.lobbyId);
+
+    try {
+      const game = await getGameById(notification.ittGameDocumentId);
+      if (!game || game.gameState !== 'completed') {
+        continue;
+      }
+
+      const lobby = lobbyFromNotification(notification);
+      const embed = createLobbyEmbed(lobby, 'ENDED');
+      const components = createLobbyComponents('ENDED', notification.ittGameDocumentId);
+      const message = await channel.messages.fetch(notification.messageId);
+      await message.edit({ embeds: [embed], components });
+
+      if (db && isInitialized) {
+        await db.collection(COLLECTION_NAME).doc(String(lobbyId)).update({
+          state: 'ENDED',
+          endedAt: Date.now(),
+          lastUpdatedAt: Date.now(),
+        });
+      }
+
+      notification.state = 'ENDED';
+
+      logger.info(`Marked lobby as ENDED: ${notification.map || 'unknown'} (ID: ${lobbyId})`, {
+        lobbyId,
+        messageId: notification.messageId,
+        ittGameDocumentId: notification.ittGameDocumentId,
+        state: 'ENDED',
+      });
+    } catch (error) {
+      if (error.code === 10008 && db && isInitialized) {
+        try {
+          await db.collection(COLLECTION_NAME).doc(String(lobbyId)).delete();
+        } catch (deleteError) {
+          logger.error(`Failed to delete missing lobby notification ${lobbyId}`, deleteError);
+        }
+        continue;
+      }
+
+      logger.error(`Failed to check ENDED for lobby ${lobbyId}`, error, {
+        lobbyId,
+        ittGameDocumentId: notification.ittGameDocumentId,
+        errorMessage: error.message,
+      });
+    }
+  }
+}
+
+/**
+ * Clean up old notification records
+ * OPEN: 24h; STARTED/ENDED: 7 days
  */
 export async function cleanupOldNotifications() {
   if (!db || !isInitialized) {
@@ -367,19 +496,37 @@ export async function cleanupOldNotifications() {
   }
 
   try {
-    // Delete notifications older than 24 hours
-    const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+    const now = Date.now();
+    const openCutoff = now - OPEN_RETENTION_MS;
+    const startedEndedCutoff = now - STARTED_ENDED_RETENTION_MS;
+    // Query a wide window; filter by state in memory
     const snapshot = await db.collection(COLLECTION_NAME)
-      .where('notifiedAt', '<', oneDayAgo)
+      .where('notifiedAt', '<', openCutoff)
       .get();
 
     const batch = db.batch();
+    let deletedCount = 0;
+
     snapshot.docs.forEach(doc => {
-      batch.delete(doc.ref);
+      const data = doc.data();
+      const state = data.state || 'OPEN';
+      const notifiedAt = data.notifiedAt || 0;
+
+      const shouldDelete =
+        state === 'OPEN'
+          ? notifiedAt < openCutoff
+          : notifiedAt < startedEndedCutoff;
+
+      if (shouldDelete) {
+        batch.delete(doc.ref);
+        deletedCount++;
+      }
     });
 
-    await batch.commit();
-    logger.info(`Cleaned up ${snapshot.docs.length} old lobby notification records`);
+    if (deletedCount > 0) {
+      await batch.commit();
+    }
+    logger.info(`Cleaned up ${deletedCount} old lobby notification records`);
   } catch (error) {
     logger.error('Failed to cleanup old notifications', error, {
       errorCode: error.code,
@@ -387,4 +534,3 @@ export async function cleanupOldNotifications() {
     });
   }
 }
-

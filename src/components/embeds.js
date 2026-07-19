@@ -84,11 +84,19 @@ function extractVersion(mapName) {
 const LOBBY_STATE = {
   OPEN: 'OPEN',
   STARTED: 'STARTED',
+  ENDED: 'ENDED',
 };
 
 const LOBBY_STATE_COLORS = {
   OPEN: 0x00c853,
   STARTED: 0xff9800,
+  ENDED: 0x607d8b,
+};
+
+const LOBBY_STATE_FOOTERS = {
+  OPEN: 'wc3stats.com • Updates automatically',
+  STARTED: 'ittweb • Upload the replay when the game finishes',
+  ENDED: 'ittweb • Game ended',
 };
 
 /**
@@ -105,7 +113,7 @@ function removeBattleTag(host) {
 /**
  * Create a Discord embed for a WC3 lobby notification
  * @param {Object} lobby - Lobby object from wc3stats API (or stored snapshot)
- * @param {'OPEN'|'STARTED'} [state='OPEN'] - Lobby lifecycle state
+ * @param {'OPEN'|'STARTED'|'ENDED'} [state='OPEN'] - Lobby lifecycle state
  * @returns {EmbedBuilder} Discord embed
  */
 export function createLobbyEmbed(lobby, state = LOBBY_STATE.OPEN) {
@@ -116,10 +124,6 @@ export function createLobbyEmbed(lobby, state = LOBBY_STATE.OPEN) {
   const slotsTaken = lobby.slotsTaken || 0;
   const slotsTotal = lobby.slotsTotal || 0;
   const slotsText = `${slotsTaken}/${slotsTotal}`;
-  const footerText =
-    normalizedState === LOBBY_STATE.OPEN
-      ? 'wc3stats.com • Updates automatically'
-      : 'wc3stats.com • Game started';
 
   const embed = new EmbedBuilder()
     .setTitle(`ITT Lobby · ${normalizedState} (${slotsText})`)
@@ -132,9 +136,58 @@ export function createLobbyEmbed(lobby, state = LOBBY_STATE.OPEN) {
     )
     .setColor(LOBBY_STATE_COLORS[normalizedState] || LOBBY_STATE_COLORS.OPEN)
     .setTimestamp(new Date((lobby.created || Date.now() / 1000) * 1000))
-    .setFooter({ text: footerText });
+    .setFooter({ text: LOBBY_STATE_FOOTERS[normalizedState] || LOBBY_STATE_FOOTERS.OPEN });
 
   return embed;
+}
+
+/**
+ * Link buttons for STARTED (upload) / ENDED (view game)
+ * @param {'OPEN'|'STARTED'|'ENDED'} state
+ * @param {string|null|undefined} ittGameDocumentId - Firestore game document ID
+ * @returns {ActionRowBuilder[]}
+ */
+export function createLobbyComponents(state, ittGameDocumentId) {
+  if (!ittGameDocumentId) {
+    return [];
+  }
+
+  const normalizedState = LOBBY_STATE[state] || LOBBY_STATE.OPEN;
+  const baseUrl = `${ITT_API_BASE}/en/games/${ittGameDocumentId}`;
+
+  if (normalizedState === LOBBY_STATE.STARTED) {
+    return [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setLabel('Upload replay')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${baseUrl}?upload=1`)
+      ),
+    ];
+  }
+
+  if (normalizedState === LOBBY_STATE.ENDED) {
+    return [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setLabel('View game')
+          .setStyle(ButtonStyle.Link)
+          .setURL(baseUrl)
+      ),
+    ];
+  }
+
+  return [];
+}
+
+/**
+ * Extract map version for API payloads (public helper)
+ * @param {string} mapName
+ * @returns {string|undefined}
+ */
+export function extractMapVersion(mapName) {
+  const version = extractVersion(mapName);
+  return version === 'Unknown' ? undefined : version;
 }
 
 /**

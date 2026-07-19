@@ -98,6 +98,53 @@ export async function getGameById(gameId) {
   return result.data;
 }
 
+/**
+ * Create an awaiting_replay game linked to a Discord lobby post
+ * @param {Object} payload
+ * @param {string} payload.discordChannelId
+ * @param {string} payload.discordMessageId
+ * @param {number} payload.wc3statsLobbyId
+ * @param {string} [payload.host]
+ * @param {string} [payload.map]
+ * @param {string} [payload.server]
+ * @param {string} [payload.gameVersion]
+ * @param {string} [payload.gameName]
+ * @returns {Promise<{ id: string, gameId: number }>}
+ */
+export async function createDiscordLobbyGame(payload) {
+  if (!BOT_API_KEY) {
+    throw new Error('Bot API key not configured');
+  }
+
+  const response = await fetch(`${ITT_API_BASE}/api/games/discord-lobby-bot`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-bot-api-key': BOT_API_KEY,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    let errorMessage = errorText;
+    try {
+      const errorData = JSON.parse(errorText);
+      errorMessage = errorData.error || errorData.message || errorText;
+    } catch {
+      // keep text
+    }
+    throw new Error(`Failed to create Discord lobby game: ${errorMessage}`);
+  }
+
+  const result = await response.json();
+  if (!result.success || !result.data?.id) {
+    throw new Error(`Failed to create Discord lobby game: ${result.error || 'Unknown error'}`);
+  }
+
+  return { id: result.data.id, gameId: result.data.gameId };
+}
+
 export async function getScheduledGameByPublicId(publicGameId) {
   const response = await fetch(
     `${ITT_API_BASE}/api/games?gameState=scheduled&gameId=${publicGameId}&limit=1`
