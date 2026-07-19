@@ -1,4 +1,4 @@
-import { LOBBY_NOTIFICATION_CHANNEL_ID, LOBBY_CHECK_INTERVAL, LOBBY_MONITORING_ENABLED } from '../config.js';
+import { NOTIFICATION_CHANNEL_ID, LOBBY_CHECK_INTERVAL, LOBBY_MONITORING_ENABLED } from '../config.js';
 import { db, isInitialized } from '../firebase.js';
 import { logger } from '../utils/logger.js';
 import { fetchActiveLobbies, filterITTGames } from '../services/wc3stats.js';
@@ -33,8 +33,8 @@ export function initializeLobbyMonitor(client) {
     return;
   }
 
-  if (!LOBBY_NOTIFICATION_CHANNEL_ID) {
-    logger.warn('LOBBY_NOTIFICATION_CHANNEL_ID not set - lobby monitoring disabled');
+  if (!NOTIFICATION_CHANNEL_ID) {
+    logger.warn('NOTIFICATION_CHANNEL_ID not set - lobby monitoring disabled');
     return;
   }
 
@@ -62,7 +62,7 @@ export function initializeLobbyMonitor(client) {
  * Check for new ITT lobbies and send/update notifications
  */
 async function checkLobbies() {
-  if (!LOBBY_MONITORING_ENABLED || !clientInstance || !LOBBY_NOTIFICATION_CHANNEL_ID) {
+  if (!LOBBY_MONITORING_ENABLED || !clientInstance || !NOTIFICATION_CHANNEL_ID) {
     return;
   }
 
@@ -74,9 +74,9 @@ async function checkLobbies() {
     const ittLobbies = filterITTGames(allLobbies);
 
     // Get channel
-    const channel = await clientInstance.channels.fetch(LOBBY_NOTIFICATION_CHANNEL_ID);
+    const channel = await clientInstance.channels.fetch(NOTIFICATION_CHANNEL_ID);
     if (!channel) {
-      logger.error(`Channel ${LOBBY_NOTIFICATION_CHANNEL_ID} not found`);
+      logger.error(`Channel ${NOTIFICATION_CHANNEL_ID} not found`);
       return;
     }
 
@@ -330,7 +330,7 @@ async function ensureDiscordLobbyGame(notification, lobby) {
 
   try {
     const created = await createDiscordLobbyGame({
-      discordChannelId: LOBBY_NOTIFICATION_CHANNEL_ID,
+      discordChannelId: NOTIFICATION_CHANNEL_ID,
       discordMessageId: notification.messageId,
       wc3statsLobbyId: Number(notification.lobbyId),
       host: lobby.host || notification.host,

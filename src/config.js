@@ -19,15 +19,20 @@ export const REMINDERS_ENABLED = true;
 export const REMINDER_MINUTES_BEFORE = 10;
 export const MAX_REMINDER_WINDOW_MS = 6 * 60 * 60 * 1000; // 6 hours
 
+// Shared Discord channel for lobby + completed-game posts
+// Falls back to legacy LOBBY_/COMPLETED_GAMES_ vars if still set
+export const NOTIFICATION_CHANNEL_ID =
+  process.env.NOTIFICATION_CHANNEL_ID ||
+  process.env.LOBBY_NOTIFICATION_CHANNEL_ID ||
+  process.env.COMPLETED_GAMES_NOTIFICATION_CHANNEL_ID;
+
 // Lobby monitoring settings
 export const LOBBY_MONITORING_ENABLED = process.env.LOBBY_MONITORING_ENABLED !== 'false'; // Default: true
-export const LOBBY_NOTIFICATION_CHANNEL_ID = process.env.LOBBY_NOTIFICATION_CHANNEL_ID;
 export const LOBBY_CHECK_INTERVAL = parseInt(process.env.LOBBY_CHECK_INTERVAL || '60', 10); // Default: 60 seconds
 export const WC3STATS_API_BASE = process.env.WC3STATS_API_BASE || 'https://api.wc3stats.com';
 
 // Completed games monitoring settings
 export const COMPLETED_GAMES_MONITORING_ENABLED = process.env.COMPLETED_GAMES_MONITORING_ENABLED !== 'false'; // Default: true
-export const COMPLETED_GAMES_NOTIFICATION_CHANNEL_ID = process.env.COMPLETED_GAMES_NOTIFICATION_CHANNEL_ID;
 export const COMPLETED_GAMES_CHECK_INTERVAL = parseInt(process.env.COMPLETED_GAMES_CHECK_INTERVAL || '120', 10); // Default: 120 seconds (2 minutes)
 
 // Configuration options for dropdowns

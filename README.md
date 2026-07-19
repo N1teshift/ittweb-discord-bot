@@ -23,11 +23,9 @@ If you own or administer a Discord server and want this bot there:
    - Read Message History
    - Use Application Commands
 5. Copy the generated URL at the bottom, open it in your browser, choose your server, and authorize.
-6. In Discord, create or pick the channel(s) where lobby / completed-game posts should appear.
+6. In Discord, create or pick the channel where lobby and completed-game posts should appear.
 7. Right-click the channel → **Copy Channel ID** (enable **Developer Mode** under Discord Settings → Advanced if you don’t see that option).
-8. Give those channel IDs to whoever runs the bot so they can set:
-   - `LOBBY_NOTIFICATION_CHANNEL_ID`
-   - `COMPLETED_GAMES_NOTIFICATION_CHANNEL_ID`
+8. Give that channel ID to whoever runs the bot so they can set `NOTIFICATION_CHANNEL_ID`.
 
 You need **Manage Server** (or Administrator) permission on the target server to add a bot.
 
@@ -54,12 +52,9 @@ BOT_API_KEY=your_api_key
 FIREBASE_SERVICE_ACCOUNT_KEY=your_firebase_json
 FIREBASE_PROJECT_ID=your_project_id
 
-# Optional: Lobby Monitoring
-LOBBY_NOTIFICATION_CHANNEL_ID=channel_id
+# Optional: notifications (lobbies + completed games)
+NOTIFICATION_CHANNEL_ID=channel_id
 LOBBY_CHECK_INTERVAL=60
-
-# Optional: Completed Games
-COMPLETED_GAMES_NOTIFICATION_CHANNEL_ID=channel_id
 COMPLETED_GAMES_CHECK_INTERVAL=120
 ```
 

@@ -1,4 +1,4 @@
-import { COMPLETED_GAMES_NOTIFICATION_CHANNEL_ID, COMPLETED_GAMES_CHECK_INTERVAL, COMPLETED_GAMES_MONITORING_ENABLED } from '../config.js';
+import { NOTIFICATION_CHANNEL_ID, COMPLETED_GAMES_CHECK_INTERVAL, COMPLETED_GAMES_MONITORING_ENABLED } from '../config.js';
 import { db, isInitialized } from '../firebase.js';
 import { logger } from '../utils/logger.js';
 import { getCompletedGames } from '../api.js';
@@ -21,8 +21,8 @@ export function initializeCompletedGamesMonitor(client) {
     return;
   }
 
-  if (!COMPLETED_GAMES_NOTIFICATION_CHANNEL_ID) {
-    logger.warn('COMPLETED_GAMES_NOTIFICATION_CHANNEL_ID not set - completed games monitoring disabled');
+  if (!NOTIFICATION_CHANNEL_ID) {
+    logger.warn('NOTIFICATION_CHANNEL_ID not set - completed games monitoring disabled');
     return;
   }
 
@@ -50,7 +50,7 @@ export function initializeCompletedGamesMonitor(client) {
  * Check for new completed games and send notifications
  */
 async function checkCompletedGames() {
-  if (!COMPLETED_GAMES_MONITORING_ENABLED || !clientInstance || !COMPLETED_GAMES_NOTIFICATION_CHANNEL_ID) {
+  if (!COMPLETED_GAMES_MONITORING_ENABLED || !clientInstance || !NOTIFICATION_CHANNEL_ID) {
     return;
   }
 
@@ -71,9 +71,9 @@ async function checkCompletedGames() {
     logger.info(`Found ${completedGames.length} completed game(s)`);
 
     // Get channel
-    const channel = await clientInstance.channels.fetch(COMPLETED_GAMES_NOTIFICATION_CHANNEL_ID);
+    const channel = await clientInstance.channels.fetch(NOTIFICATION_CHANNEL_ID);
     if (!channel) {
-      logger.error(`Channel ${COMPLETED_GAMES_NOTIFICATION_CHANNEL_ID} not found`);
+      logger.error(`Channel ${NOTIFICATION_CHANNEL_ID} not found`);
       return;
     }
 
