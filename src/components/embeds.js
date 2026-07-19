@@ -67,17 +67,29 @@ export function createGameButtons(gameId, userJoined = false) {
 }
 
 /**
- * Extract version from map name (e.g., "Island.Troll.Tribes.v3.29c.w3x" -> "v3.29c")
+ * Extract version from map name
+ * Examples: "Island.Troll.Tribes.v3.29c.w3x" -> "v3.29c"
+ *           "Island.Troll.Tribes.v3.30.6.w3x" -> "v3.30.6"
  * @param {string} mapName - Full map name
  * @returns {string} Version string or "Unknown"
  */
 function extractVersion(mapName) {
   if (!mapName) return 'Unknown';
-  
-  // Match version pattern: v followed by numbers, dots, and letters (e.g., v3.29c, v3.28)
-  const versionMatch = mapName.match(/v\d+\.\d+[a-z]?/i);
+
+  // v3.28, v3.29c, v3.30.6, v3.30.6a
+  const versionMatch = mapName.match(/v\d+(?:\.\d+)+[a-z]?/i);
   return versionMatch ? versionMatch[0] : 'Unknown';
 }
+
+const LOBBY_STATE = {
+  OPEN: 'OPEN',
+  STARTED: 'STARTED',
+};
+
+const LOBBY_STATE_COLORS = {
+  OPEN: 0x00c853,
+  STARTED: 0xff9800,
+};
 
 /**
  * Remove battle tag from host name (e.g., "Scatman33#2333" -> "Scatman33")
@@ -92,28 +104,35 @@ function removeBattleTag(host) {
 
 /**
  * Create a Discord embed for a WC3 lobby notification
- * @param {Object} lobby - Lobby object from wc3stats API
+ * @param {Object} lobby - Lobby object from wc3stats API (or stored snapshot)
+ * @param {'OPEN'|'STARTED'} [state='OPEN'] - Lobby lifecycle state
  * @returns {EmbedBuilder} Discord embed
  */
-export function createLobbyEmbed(lobby) {
+export function createLobbyEmbed(lobby, state = LOBBY_STATE.OPEN) {
+  const normalizedState = LOBBY_STATE[state] || LOBBY_STATE.OPEN;
   const version = extractVersion(lobby.map);
   const hostName = removeBattleTag(lobby.host);
   const serverName = (lobby.server || 'unknown').toUpperCase();
   const slotsTaken = lobby.slotsTaken || 0;
   const slotsTotal = lobby.slotsTotal || 0;
   const slotsText = `${slotsTaken}/${slotsTotal}`;
+  const footerText =
+    normalizedState === LOBBY_STATE.OPEN
+      ? 'wc3stats.com • Updates automatically'
+      : 'wc3stats.com • Game started';
 
   const embed = new EmbedBuilder()
-    .setTitle(`ITT Lobby (${slotsText})`)
+    .setTitle(`ITT Lobby · ${normalizedState} (${slotsText})`)
     .setDescription(`**${lobby.name || 'Unnamed Game'}**`)
     .addFields(
+      { name: '📡 Status', value: normalizedState, inline: true },
       { name: '📦 Version', value: version, inline: true },
       { name: '👤 Host', value: hostName, inline: true },
       { name: '🌍 Server', value: serverName, inline: true }
     )
-    .setColor(0x0099ff)
+    .setColor(LOBBY_STATE_COLORS[normalizedState] || LOBBY_STATE_COLORS.OPEN)
     .setTimestamp(new Date((lobby.created || Date.now() / 1000) * 1000))
-    .setFooter({ text: 'wc3stats.com • Updates automatically' });
+    .setFooter({ text: footerText });
 
   return embed;
 }
