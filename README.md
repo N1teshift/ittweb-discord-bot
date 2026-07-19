@@ -10,7 +10,7 @@
 
 If you own or administer a Discord server and want this bot there:
 
-1. Open the [Discord Developer Portal](https://discord.com/developers/applications) and select the bot application (or ask the bot owner for the **Application ID** / invite link).
+1. Use the ready-made invite link below, or open the [Discord Developer Portal](https://discord.com/developers/applications) to generate your own.
 2. Go to **OAuth2 → URL Generator**.
 3. Under **Scopes**, enable:
    - `bot`
@@ -29,12 +29,10 @@ If you own or administer a Discord server and want this bot there:
 
 You need **Manage Server** (or Administrator) permission on the target server to add a bot.
 
-### Ready-made invite link (template)
-
-Replace `YOUR_APPLICATION_ID` with the bot’s Application ID from the Developer Portal:
+### Ready-made invite link
 
 ```text
-https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&permissions=277025770560&scope=bot%20applications.commands
+https://discord.com/oauth2/authorize?client_id=1403760064774541445&permissions=277025770560&scope=bot%20applications.commands
 ```
 
 That `permissions` value covers the permissions listed above.
