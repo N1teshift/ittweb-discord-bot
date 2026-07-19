@@ -21,6 +21,13 @@ You need **Manage Server** (or Administrator) permission on the target server to
 https://discord.com/oauth2/authorize?client_id=1403760064774541445&permissions=277025770560&scope=bot%20applications.commands
 ```
 
+## Screenshots
+
+![Open lobby](assets/bot_open.png)
+![Game started](assets/bot_started.png)
+![Game started (large)](assets/bot_started_large.png)
+![Game ended](assets/bot_ended.png)
+
 ## Setup (bot operators)
 
 1. Create a Discord bot and get token/ID from [Discord Developer Portal](https://discord.com/developers/applications)
