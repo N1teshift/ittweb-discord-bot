@@ -438,6 +438,32 @@ async function markMissingLobbiesAsStarted(channel, activeNotifications, activeL
  * @param {Channel} channel
  * @param {Array} activeNotifications
  */
+async function markLobbyStale(channel, notification, lobbyId) {
+  try {
+    const message = await channel.messages.fetch(notification.messageId);
+    const embed = createLobbyEmbed(
+      { map: notification.map, id: lobbyId, slotsTaken: 0, slotsTotal: 0 },
+      'ENDED'
+    );
+    embed.data.description = '⚠️ Game data is no longer available (removed from ITT). Marked as finished.';
+    await message.edit({ embeds: [embed], components: [] });
+  } catch (editError) {
+    if (editError.code !== 10008) {
+      logger.error(`Failed to mark lobby ${lobbyId} stale`, editError);
+    }
+  }
+
+  if (db && isInitialized) {
+    await db.collection(COLLECTION_NAME).doc(String(lobbyId)).update({
+      state: 'ENDED',
+      endedAt: Date.now(),
+      lastUpdatedAt: Date.now(),
+      stale: true,
+    });
+  }
+  notification.state = 'ENDED';
+}
+
 async function checkStartedLobbiesForEnded(channel, activeNotifications) {
   for (const notification of activeNotifications) {
     if (notification.state !== 'STARTED' || !notification.ittGameDocumentId || !notification.messageId) {
@@ -447,7 +473,19 @@ async function checkStartedLobbiesForEnded(channel, activeNotifications) {
     const lobbyId = Number(notification.lobbyId);
 
     try {
-      const game = await getGameById(notification.ittGameDocumentId);
+      let game;
+      try {
+        game = await getGameById(notification.ittGameDocumentId);
+      } catch (fetchError) {
+        // ponytail: game vanished from the ITT API (deleted/old) — stop polling, mark stale
+        logger.warn(`Game ${notification.ittGameDocumentId} not fetchable for lobby ${lobbyId}, marking stale`, {
+          lobbyId,
+          ittGameDocumentId: notification.ittGameDocumentId,
+          errorMessage: fetchError.message,
+        });
+        await markLobbyStale(channel, notification, lobbyId);
+        continue;
+      }
       if (!game || game.gameState !== 'completed') {
         continue;
       }
