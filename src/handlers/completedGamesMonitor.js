@@ -208,11 +208,7 @@ async function getNotifiedGameIds() {
   }
 
   try {
-    // Get all notified games from the last 24 hours
-    const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
-    const snapshot = await db.collection(COLLECTION_NAME)
-      .where('notifiedAt', '>=', oneDayAgo)
-      .get();
+    const snapshot = await db.collection(COLLECTION_NAME).get();
 
     const notifiedIds = new Set();
     snapshot.docs.forEach(doc => {

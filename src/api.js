@@ -208,6 +208,30 @@ export async function leaveScheduledGame(discordId, gameId) {
 }
 
 /**
+ * Cancel a lobby-created awaiting_replay game that timed out
+ * @param {string} gameDocumentId - ITT game document ID
+ * @returns {Promise<void>}
+ */
+export async function cancelLobbyGame(gameDocumentId) {
+  if (!BOT_API_KEY) {
+    throw new Error('Bot API key not configured');
+  }
+
+  const response = await fetch(`${ITT_API_BASE}/api/games/${gameDocumentId}/cancel-bot`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-bot-api-key': BOT_API_KEY,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to cancel lobby game: ${errorText}`);
+  }
+}
+
+/**
  * Get completed games with players from ITT API
  * @param {number} limit - Maximum number of games to fetch
  * @returns {Promise<Array>} Array of completed games with players

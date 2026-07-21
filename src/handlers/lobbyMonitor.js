@@ -2,7 +2,7 @@ import { NOTIFICATION_CHANNEL_ID, LOBBY_CHECK_INTERVAL, LOBBY_MONITORING_ENABLED
 import { db, isInitialized } from '../firebase.js';
 import { logger } from '../utils/logger.js';
 import { fetchActiveLobbies, filterITTGames } from '../services/wc3stats.js';
-import { createDiscordLobbyGame, getGameById } from '../api.js';
+import { cancelLobbyGame, createDiscordLobbyGame, getGameById } from '../api.js';
 import {
   createLobbyEmbed,
   createLobbyComponents,
@@ -438,14 +438,14 @@ async function markMissingLobbiesAsStarted(channel, activeNotifications, activeL
  * @param {Channel} channel
  * @param {Array} activeNotifications
  */
-async function markLobbyStale(channel, notification, lobbyId) {
+async function markLobbyStale(channel, notification, lobbyId, description) {
   try {
     const message = await channel.messages.fetch(notification.messageId);
     const embed = createLobbyEmbed(
       { map: notification.map, id: lobbyId, slotsTaken: 0, slotsTotal: 0 },
       'ENDED'
     );
-    embed.data.description = '⚠️ Game data is no longer available (removed from ITT). Marked as finished.';
+    embed.data.description = description || '⚠️ Game data is no longer available (removed from ITT). Marked as finished.';
     await message.edit({ embeds: [embed], components: [] });
   } catch (editError) {
     if (editError.code !== 10008) {
@@ -487,6 +487,34 @@ async function checkStartedLobbiesForEnded(channel, activeNotifications) {
         continue;
       }
       if (!game || game.gameState !== 'completed') {
+        // ponytail: 6-hour timeout for abandoned lobbies, upgrade to global timeout if false positives appear
+        const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+        const startedAt = notification.startedAt || 0;
+        if (startedAt && Date.now() - startedAt > SIX_HOURS_MS) {
+          try {
+            await cancelLobbyGame(notification.ittGameDocumentId);
+          } catch (cancelError) {
+            logger.warn(`cancel-bot failed for lobby ${lobbyId}, marking stale anyway`, {
+              lobbyId,
+              ittGameDocumentId: notification.ittGameDocumentId,
+              errorMessage: cancelError.message,
+            });
+          }
+          try {
+            const message = await channel.messages.fetch(notification.messageId);
+            await message.delete();
+          } catch (deleteError) {
+            if (deleteError.code !== 10008) {
+              logger.error(`Failed to delete abandoned lobby message ${lobbyId}`, deleteError);
+            }
+          }
+          if (db && isInitialized) {
+            await db.collection(COLLECTION_NAME).doc(String(lobbyId)).delete();
+          }
+          notification.state = 'ENDED';
+          logger.info(`Deleted abandoned lobby post (timeout >6h): ${notification.map || 'unknown'} (ID: ${lobbyId})`, { lobbyId });
+          continue;
+        }
         continue;
       }
 
