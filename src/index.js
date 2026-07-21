@@ -31,7 +31,6 @@ import { handleButton } from './handlers/buttons.js';
 import { handleSelectMenu } from './handlers/selectMenus.js';
 import { setClient } from './handlers/reminders.js';
 import { initializeLobbyMonitor } from './handlers/lobbyMonitor.js';
-import { initializeCompletedGamesMonitor } from './handlers/completedGamesMonitor.js';
 
 // Initialize Discord client
 const client = new Client({
@@ -74,7 +73,6 @@ const onReady = () => {
   console.log(`Logged in as ${client.user.tag}!`);
   setClient(client);
   initializeLobbyMonitor(client);
-  initializeCompletedGamesMonitor(client);
   registerCommands();
 };
 
